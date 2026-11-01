@@ -131,4 +131,9 @@ if(APPLICATION_TEST_SOURCES)
         NAME atm_application_tests
         COMMAND atm_application_tests
     )
+
+    set_tests_properties(atm_application_tests PROPERTIES
+        TIMEOUT 60
+    )
 endif()
+
