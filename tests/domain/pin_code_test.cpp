@@ -19,20 +19,16 @@ static_assert(std::is_nothrow_default_constructible_v<PinCode>);
 
 static_assert(!std::is_convertible_v<std::string, PinCode>);
 
-// --- digits & str ---
+// --- digits ---
 
-TEST(V2PinCode, Str_Digits_DefaultZeroes) {
+TEST(V2PinCode, Digits_DefaultZeroes) {
     const PinCode pin{};
-    EXPECT_EQ(pin.str(), "0000");
-    
     const std::array<char, 4> expected{'0', '0', '0', '0'};
     EXPECT_EQ(pin.digits(), expected);
 }
 
-TEST(V2PinCode, Str_Digits_ValidPin) {
+TEST(V2PinCode, Digits_ValidPin) {
     const auto pin = PinCode::parse("1234");
-    EXPECT_EQ(pin.str(), "1234");
-    
     const std::array<char, 4> expected{'1', '2', '3', '4'};
     EXPECT_EQ(pin.digits(), expected);
 }
@@ -41,7 +37,8 @@ TEST(V2PinCode, Str_Digits_ValidPin) {
 
 TEST(V2PinCode, Parse_ValidPin) {
     const auto pin = PinCode::parse("0007");
-    EXPECT_EQ(pin.str(), "0007");
+    const std::array<char, 4> expected{'0', '0', '0', '7'};
+    EXPECT_EQ(pin.digits(), expected);
     EXPECT_EQ(pin.digits()[0], '0');
     EXPECT_EQ(pin.digits()[3], '7');
 }
@@ -54,9 +51,7 @@ TEST(V2PinCode, Parse_ThrowsInvalidArgument_InvalidLength) {
 
 TEST(V2PinCode, Parse_ThrowsInvalidArgument_InvalidCharacters) {
     EXPECT_THROW((void)PinCode::parse("12a4"), std::invalid_argument);
-    // Пробіли
     EXPECT_THROW((void)PinCode::parse("12 4"), std::invalid_argument);
-    // Спецсимволи
     EXPECT_THROW((void)PinCode::parse("12-4"), std::invalid_argument);
 }
 

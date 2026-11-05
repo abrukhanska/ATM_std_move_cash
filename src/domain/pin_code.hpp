@@ -10,10 +10,11 @@ namespace atm::domain {
     public:
         constexpr PinCode() noexcept { digits_.fill('0'); };
         
-        [[nodiscard]] static PinCode parse(const std::string& str);
+        [[nodiscard]] static PinCode parse(std::string_view str);
 
-        [[nodiscard]] std::string str() const { return std::string(digits_.data(), digits_.size()); }
-        [[nodiscard]] const std::array<char, 4>& digits() const noexcept { return digits_; }
+        [[nodiscard]] const std::array<char, 4>& digits() const noexcept {
+            return digits_;
+        }
 
         [[nodiscard]] constexpr bool operator==(const PinCode&) const noexcept = default;
         [[nodiscard]] constexpr bool operator!=(const PinCode&) const noexcept = default;

@@ -17,13 +17,12 @@ static_assert(std::is_nothrow_default_constructible_v<CardNumber>);
 
 static_assert(!std::is_convertible_v<std::string, CardNumber>);
 
-// --- str & masked & format & parse ---
+// --- str & masked & parse ---
 
 TEST(V2CardNumber, Str_Masked_Format_DefaultZeroes) {
     const CardNumber card{};
     EXPECT_EQ(card.str(), "0000000000000000");
     EXPECT_EQ(card.masked(), "**** **** **** 0000");
-    EXPECT_EQ(card.format(), "0000 0000 0000 0000");
 }
 
 TEST(V2CardNumber, ParseAcceptsValidSixteenDigits) {
@@ -52,7 +51,6 @@ TEST(V2CardNumber, Str_Masked_Format_ValidCard) {
     const auto card = CardNumber::parse("4000123456789010");
     EXPECT_EQ(card.str(), "4000123456789010");
     EXPECT_EQ(card.masked(), "**** **** **** 9010");
-    EXPECT_EQ(card.format(), "4000 1234 5678 9010");
 }
 
 TEST(V2CardNumber, ComparisonOperators) {

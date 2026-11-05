@@ -16,7 +16,7 @@ using atm::domain::ErrorReason;
 using atm::domain::Money;
 
 static_assert(noexcept(std::declval<const Account&>().id()));
-static_assert(noexcept(std::declval<const Account&>().cardNumber()));
+static_assert(noexcept(std::declval<const Account&>().owner()));
 static_assert(noexcept(std::declval<const Account&>().balance()));
 static_assert(noexcept(std::declval<const Account&>().isPrimary()));
 
@@ -27,7 +27,7 @@ TEST(V2Account, ConstructorInitializesFieldsCorrectly) {
     const Account acc(101, cardNum, Money::uah(500), true);
 
     EXPECT_EQ(acc.id(), 101);
-    EXPECT_EQ(acc.cardNumber(), cardNum);
+    EXPECT_EQ(acc.owner(), cardNum);
     EXPECT_EQ(acc.balance(), Money::uah(500));
     EXPECT_TRUE(acc.isPrimary());
 }

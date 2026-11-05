@@ -2,7 +2,7 @@
 
 namespace atm::domain {
 
-    void Card::registerFailedAttempts() noexcept {
+    void Card::registerFailedAttempt() noexcept {
         if (status_ == CardStatus::Active && kind_ == CardKind::Client) {
             ++failedAttempts_;
             if (failedAttempts_ >= 3) {

@@ -3,7 +3,7 @@
 #include "domain/enums.hpp"
 
 namespace atm::domain {
-    [[nodiscard]] PinCode PinCode::parse(const std::string& str) {
+    [[nodiscard]] PinCode PinCode::parse(const std::string_view str) {
         if (str.size() != 4) {
             throw std::invalid_argument("PinCode must be 4 digits");
         }
