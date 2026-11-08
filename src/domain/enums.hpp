@@ -85,7 +85,8 @@ namespace atm::domain {
     }
 
     static_assert(denominationIndex(Denomination::UAH2000) == kDenominationCount - 1,
-        "останній номінал має останній індекс");
+        "UAH2000 must have the last denomination index");
+
     static_assert(
         [] {
             for (std::size_t i = 0; i < kDenominationCount; ++i) {
@@ -95,13 +96,15 @@ namespace atm::domain {
             }
             return true;
         }(),
-            "kAllDenominations має йти в порядку перелічення");
+            "kAllDenominations must follow the enumeration order");
+
     static_assert(isValidDenomination(Denomination::UAH100) &&
         isValidDenomination(Denomination::UAH2000),
-        "крайні номінали валідні");
+        "The first and last denominations must be valid");
+
     static_assert(!isValidDenomination(static_cast<Denomination>(5)) &&
         !isValidDenomination(static_cast<Denomination>(-1)),
-        "значення поза переліченням невалідні");
+        "Out-of-range denomination values must be rejected");
 
     // Text names for journal entries, tests, and database storage
 
