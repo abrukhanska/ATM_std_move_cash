@@ -5,6 +5,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <string_view>
+#include <optional>
 
 namespace atm::domain {
 
@@ -103,6 +104,33 @@ namespace atm::domain {
         !isValidDenomination(static_cast<Denomination>(-1)),
         "значення поза переліченням невалідні");
 
+    [[nodiscard]] constexpr std::optional<CardKind> toCardKind(std::string_view k) noexcept {
+        if (k == "Client") return CardKind::Client;
+        if (k == "Service") return CardKind::Service;
+        return std::nullopt;
+    }
+
+    [[nodiscard]] constexpr std::optional<CardStatus> toCardStatus(std::string_view s) noexcept {
+        if (s == "Active") return CardStatus::Active;
+        if (s == "Retained") return CardStatus::Retained;
+        return std::nullopt;
+    }
+
+    [[nodiscard]] constexpr std::optional<EntryKind> toEntryKind(std::string_view s) noexcept {
+        if (s == "Withdrawal") return EntryKind::Withdrawal;
+        if (s == "Deposit") return EntryKind::Deposit;
+        if (s == "Transfer") return EntryKind::Transfer;
+        if (s == "Payment") return EntryKind::Payment;
+        if (s == "PinChange") return EntryKind::PinChange;
+        if (s == "CardRetained") return EntryKind::CardRetained;
+        if (s == "CardReleased") return EntryKind::CardReleased;
+        if (s == "CashLoaded") return EntryKind::CashLoaded;
+        if (s == "CashUnloaded") return EntryKind::CashUnloaded;
+        if (s == "DeviceInService") return EntryKind::DeviceInService;
+        if (s == "DeviceOutOfService") return EntryKind::DeviceOutOfService;
+        return std::nullopt;
+    }
+
     // Text names for journal entries, tests, and database storage
 
     [[nodiscard]] constexpr std::string_view toString(ErrorReason r) noexcept {
@@ -139,6 +167,22 @@ namespace atm::domain {
         case EntryKind::CashUnloaded: return "CashUnloaded";
         case EntryKind::DeviceInService: return "DeviceInService";
         case EntryKind::DeviceOutOfService: return "DeviceOutOfService";
+        }
+        return "Unknown";
+    }
+
+    [[nodiscard]] constexpr std::string_view toString(CardKind k) noexcept {
+        switch (k) {
+        case CardKind::Client: return "Client";
+        case CardKind::Service: return "Service";
+        }
+        return "Unknown";
+    }
+
+    [[nodiscard]] constexpr std::string_view toString(CardStatus s) noexcept {
+        switch (s) {
+        case CardStatus::Active: return "Active";
+        case CardStatus::Retained: return "Retained";
         }
         return "Unknown";
     }
