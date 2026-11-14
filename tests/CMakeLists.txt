@@ -137,3 +137,33 @@ if(APPLICATION_TEST_SOURCES)
     )
 endif()
 
+# --- infrastructure ---------------------------------------------------------
+
+file(GLOB_RECURSE INFRASTRUCTURE_TEST_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/infrastructure/*.cpp"
+)
+
+if(INFRASTRUCTURE_TEST_SOURCES)
+    add_executable(atm_infrastructure_tests
+        ${INFRASTRUCTURE_TEST_SOURCES}
+        ${ATM_TEST_MAIN}
+    )
+
+    target_compile_features(atm_infrastructure_tests PRIVATE cxx_std_20)
+
+    target_include_directories(atm_infrastructure_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+    )
+
+    target_link_libraries(atm_infrastructure_tests PRIVATE
+        atm_infrastructure
+        atm_domain
+        sqlite3
+    )
+
+    add_test(
+        NAME atm_infrastructure_tests
+        COMMAND atm_infrastructure_tests
+    )
+endif()
+

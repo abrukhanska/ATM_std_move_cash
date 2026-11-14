@@ -1,7 +1,10 @@
 #ifndef ATM_DOMAIN_ISTORAGE_HPP
 #define ATM_DOMAIN_ISTORAGE_HPP
 
-#include "repositories.hpp"
+#include "icard_repository.hpp"
+#include "iaccount_repository.hpp"
+#include "icash_repository.hpp"
+#include "ijournal_repository.hpp"
 
 namespace atm::domain {
 
