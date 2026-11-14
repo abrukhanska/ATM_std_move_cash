@@ -177,7 +177,7 @@ namespace atm::infrastructure::sql {
             sqlite3_bind_int64(stmt.get(), 11, uah500) != SQLITE_OK ||
             sqlite3_bind_int64(stmt.get(), 12, uah1000) != SQLITE_OK ||
             sqlite3_bind_int64(stmt.get(), 13, uah2000) != SQLITE_OK ||
-            bindInt(stmt.get(), 14, entry.payeeId > 0 ? std::make_optional(entry.payeeId) : std::nullopt) != SQLITE_OK ||
+            bindInt(stmt.get(), 14, entry.payeeId.value_or(0) > 0 ? entry.payeeId : std::nullopt) != SQLITE_OK ||
             bindString(stmt.get(), 15, entry.requisite.empty() ? std::nullopt : std::make_optional(entry.requisite)) != SQLITE_OK) {
             throw StorageError("JournalRepository::append bind", SQLITE_ERROR, sqlite3_errmsg(handle));
         }
