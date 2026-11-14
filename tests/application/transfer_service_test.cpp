@@ -31,13 +31,13 @@ namespace {
         } };
 
         Fixture() {
-            storage.cards().save(Card(sender, "Sender", "hash", CardKind::Client));
-            storage.cards().save(Card(recipient, "Recipient", "hash", CardKind::Client));
-            storage.accounts().save(Account(1, sender, Money::uah(2'000), true));
-            storage.accounts().save(Account(2, sender, Money::uah(1'000)));
-            storage.accounts().save(Account(3, recipient, Money::uah(300)));
-            storage.accounts().save(Account(4, recipient, Money::uah(500), true));
-            storage.cash().save(BanknoteSet{}.with(Denomination::UAH100, 3));
+            storage.seed(Card(sender, "Sender", "hash", CardKind::Client));
+            storage.seed(Card(recipient, "Recipient", "hash", CardKind::Client));
+            storage.seed(Account(1, sender, Money::uah(2'000), true));
+            storage.seed(Account(2, sender, Money::uah(1'000)));
+            storage.seed(Account(3, recipient, Money::uah(300)));
+            storage.seed(Account(4, recipient, Money::uah(500), true));
+            storage.seed(BanknoteSet{}.with(Denomination::UAH100, 3));
         }
 
         Money balance(AccountId id) {
@@ -65,7 +65,7 @@ namespace {
         for (const auto status : { CardStatus::Active, CardStatus::Retained }) {
             Fixture f;
             if (status == CardStatus::Retained) {
-                f.storage.cards().save(Card(f.recipient, "Recipient", "hash", CardKind::Client, status, 3));
+                f.storage.seed(Card(f.recipient, "Recipient", "hash", CardKind::Client, status, 3));
             }
             const auto amount = Money::ofKopiykas(12'345);
             const auto preview = f.service.preview(f.sender, 2, f.recipient, amount);
@@ -123,8 +123,8 @@ namespace {
         Fixture f;
         const auto missing = CardNumber::parse("4000000000000009");
         const auto operatorCard = CardNumber::parse("4000000000000003");
-        f.storage.cards().save(Card(operatorCard, "Operator", "hash", CardKind::Service));
-        f.storage.accounts().save(Account(5, operatorCard, Money{}, true));
+        f.storage.seed(Card(operatorCard, "Operator", "hash", CardKind::Service));
+        f.storage.seed(Account(5, operatorCard, Money{}, true));
         const auto amount = Money::uah(100);
         auto preview = f.service.preview(f.sender, 2, f.recipient, amount);
 
@@ -139,7 +139,7 @@ namespace {
         EXPECT_DOMAIN_ERROR((void)f.service.execute(f.sender, 2, preview), ErrorReason::InvalidPreview);
 
         preview = f.service.preview(f.sender, 2, f.recipient, amount);
-        f.storage.accounts().save(Account(4, f.recipient, Money::uah(500)));
+        f.storage.seed(Account(4, f.recipient, Money::uah(500)));
         EXPECT_DOMAIN_ERROR((void)f.service.preview(f.sender, 2, f.recipient, amount),
             ErrorReason::UnknownAccount);
         EXPECT_DOMAIN_ERROR((void)f.service.execute(f.sender, 2, preview), ErrorReason::InvalidPreview);
@@ -150,12 +150,12 @@ namespace {
     TEST(TransferServiceTest, TR2RejectsStaleRecipientNameAndPrimaryAccount) {
         Fixture f;
         const auto old = f.service.preview(f.sender, 2, f.recipient, Money::uah(100));
-        f.storage.cards().save(Card(f.recipient, "Renamed", "hash", CardKind::Client));
+        f.storage.seed(Card(f.recipient, "Renamed", "hash", CardKind::Client));
         EXPECT_DOMAIN_ERROR((void)f.service.execute(f.sender, 2, old), ErrorReason::InvalidPreview);
 
         const auto refreshed = f.service.preview(f.sender, 2, f.recipient, Money::uah(100));
-        f.storage.accounts().save(Account(4, f.recipient, Money::uah(500)));
-        f.storage.accounts().save(Account(3, f.recipient, Money::uah(300), true));
+        f.storage.seed(Account(4, f.recipient, Money::uah(500)));
+        f.storage.seed(Account(3, f.recipient, Money::uah(300), true));
         EXPECT_DOMAIN_ERROR((void)f.service.execute(f.sender, 2, refreshed), ErrorReason::InvalidPreview);
         f.expectUnchanged();
     }
@@ -172,10 +172,10 @@ namespace {
         EXPECT_DOMAIN_ERROR((void)f.service.preview(f.sender, 3, f.recipient, amount),
             ErrorReason::AccessDenied);
 
-        f.storage.cards().save(Card(f.sender, "Sender", "hash", CardKind::Service));
+        f.storage.seed(Card(f.sender, "Sender", "hash", CardKind::Service));
         EXPECT_DOMAIN_ERROR((void)f.service.preview(f.sender, 2, f.recipient, amount),
             ErrorReason::AccessDenied);
-        f.storage.cards().save(Card(f.sender, "Sender", "hash", CardKind::Client, CardStatus::Retained, 3));
+        f.storage.seed(Card(f.sender, "Sender", "hash", CardKind::Client, CardStatus::Retained, 3));
         EXPECT_DOMAIN_ERROR((void)f.service.preview(f.sender, 2, f.recipient, amount),
             ErrorReason::AccessDenied);
         f.expectUnchanged();
@@ -185,8 +185,8 @@ namespace {
         Fixture f;
         const auto maximum = (std::numeric_limits<std::int64_t>::max)();
         const auto amount = Money::ofKopiykas(1);
-        f.storage.accounts().save(Account(2, f.sender, amount));
-        f.storage.accounts().save(Account(4, f.recipient, Money::ofKopiykas(maximum - 1), true));
+        f.storage.seed(Account(2, f.sender, amount));
+        f.storage.seed(Account(4, f.recipient, Money::ofKopiykas(maximum - 1), true));
 
         const auto preview = f.service.preview(f.sender, 2, f.recipient, amount);
         const auto entry = f.service.execute(f.sender, 2, preview);
@@ -202,7 +202,7 @@ namespace {
         const auto preview = f.service.preview(f.sender, 2, f.recipient, Money::uah(100));
         EXPECT_DOMAIN_ERROR((void)f.service.execute(f.sender, 9, preview), ErrorReason::UnknownAccount);
         EXPECT_DOMAIN_ERROR((void)f.service.execute(f.sender, 3, preview), ErrorReason::AccessDenied);
-        f.storage.cards().save(Card(f.sender, "Sender", "hash", CardKind::Client, CardStatus::Retained, 3));
+        f.storage.seed(Card(f.sender, "Sender", "hash", CardKind::Client, CardStatus::Retained, 3));
         EXPECT_DOMAIN_ERROR((void)f.service.execute(f.sender, 2, preview), ErrorReason::AccessDenied);
         f.expectUnchanged();
     }
@@ -210,13 +210,13 @@ namespace {
     TEST(TransferServiceTest, TR2RejectsInsufficientFundsAndRecipientOverflow) {
         Fixture f;
         const auto preview = f.service.preview(f.sender, 2, f.recipient, Money::uah(100));
-        f.storage.accounts().save(Account(2, f.sender, Money::uah(99)));
+        f.storage.seed(Account(2, f.sender, Money::uah(99)));
         EXPECT_DOMAIN_ERROR((void)f.service.execute(f.sender, 2, preview), ErrorReason::InsufficientFunds);
         f.expectUnchanged(Money::uah(99));
 
         const auto maximum = Money::ofKopiykas((std::numeric_limits<std::int64_t>::max)());
-        f.storage.accounts().save(Account(2, f.sender, Money::uah(1'000)));
-        f.storage.accounts().save(Account(4, f.recipient, maximum, true));
+        f.storage.seed(Account(2, f.sender, Money::uah(1'000)));
+        f.storage.seed(Account(4, f.recipient, maximum, true));
         EXPECT_DOMAIN_ERROR((void)f.service.execute(f.sender, 2, preview), ErrorReason::Overflow);
         f.expectUnchanged(Money::uah(1'000), maximum);
     }

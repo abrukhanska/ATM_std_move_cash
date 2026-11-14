@@ -61,23 +61,22 @@ namespace {
         }
 
         void seed() {
-            storage.cards().save(Card(operatorCard, "Operator", "hash", CardKind::Service));
-            storage.cards().save(Card(client, "Client", "hash", CardKind::Client));
-            storage.cards().save(Card(retained, "Retained", "hash", CardKind::Client, CardStatus::Retained, 3));
-            storage.accounts().save(Account(1, client, Money::uah(30'000), true));
-            storage.accounts().save(Account(2, client, Money::uah(20'000)));
+            storage.seed(Card(operatorCard, "Operator", "hash", CardKind::Service));
+            storage.seed(Card(client, "Client", "hash", CardKind::Client));
+            storage.seed(Card(retained, "Retained", "hash", CardKind::Client, CardStatus::Retained, 3));
+            storage.seed(Account(1, client, Money::uah(30'000), true));
+            storage.seed(Account(2, client, Money::uah(20'000)));
             BanknoteSet cash;
             for (const auto denomination : atm::domain::kAllDenominations) {
                 cash = cash.with(denomination, 50);
             }
-            storage.cash().save(cash);
+            storage.seed(cash);
         }
 
         BanknoteSet cash() { return storage.cash().load(); }
         std::vector<JournalEntry> journal() { return storage.journal().last(100); }
     };
 
-    // Seed the in-memory journal directly to isolate ordering and aggregation.
     JournalEntry append(Fixture& f, EntryKind kind, Money amount, std::int64_t secondsEarlier = 0) {
         JournalEntry entry{};
         entry.kind = kind;
@@ -85,7 +84,7 @@ namespace {
         entry.localDay = atm::domain::localDay(f.now);
         entry.atUtc = atm::domain::toEpochSeconds(f.now) - secondsEarlier;
         entry.amount = amount;
-        return f.storage.journal().append(entry);
+        return f.storage.seed(entry);
     }
 
     TEST(SV2Monitoring, ConstructorRejectsZeroTailSize) {
