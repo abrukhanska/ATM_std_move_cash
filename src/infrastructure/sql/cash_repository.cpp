@@ -1,17 +1,19 @@
-#include <sqlite3.h>
-
 #include "infrastructure/sql/cash_repository.hpp"
 #include "infrastructure/sql/database.hpp"
 #include "infrastructure/sql/storage_error.hpp"
 
+#include <sqlite3.h>
+
 namespace atm::infrastructure::sql {
 
-    struct SqliteStmtDeleter {
+    struct StmtFinalizer {
         void operator()(sqlite3_stmt* stmt) const noexcept {
-            sqlite3_finalize(stmt);
+            if (stmt) {
+                sqlite3_finalize(stmt);
+            }
         }
     };
-    using Stmt = std::unique_ptr<sqlite3_stmt, SqliteStmtDeleter>;
+    using Stmt = std::unique_ptr<sqlite3_stmt, StmtFinalizer>;
 
     domain::BanknoteSet CashRepository::load() const
     {
@@ -28,16 +30,32 @@ namespace atm::infrastructure::sql {
         Stmt stmt(stmt_ptr);
         domain::BanknoteSet banknotes;
 
-        while (sqlite3_step(stmt.get()) == SQLITE_ROW) {
-            std::int64_t db_denomination = sqlite3_column_int64(stmt.get(), 0); // column denomination
-            std::uint32_t db_count = static_cast<std::uint32_t>(sqlite3_column_int(stmt.get(), 1)); // column count
+        while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
+            std::int64_t db_denomination = sqlite3_column_int64(stmt.get(), 0);
 
+            std::uint32_t db_count = [&]() {
+                std::int64_t count = sqlite3_column_int64(stmt.get(), 1);
+                if (count < 0 || count > static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max())) {
+                    throw StorageError("CashRepository::load", SQLITE_RANGE, "Banknote count out of range");
+                }
+                return static_cast<std::uint32_t>(count);
+            }();
+
+            bool matched = false;
             for (const auto& denomination : domain::kAllDenominations) {
                 if (domain::denominationUah(denomination) == db_denomination) {
                     banknotes = banknotes.with(denomination, db_count);
+                    matched = true;
                     break;
                 }
             }
+            if (!matched) {
+                throw StorageError("CashRepository::load", SQLITE_CORRUPT, "Unknown banknote denomination");
+            }
+        }
+
+        if (rc != SQLITE_DONE) {
+            throw StorageError("CashRepository::load step", rc, sqlite3_errmsg(handle));
         }
 
         return banknotes;
@@ -66,9 +84,8 @@ namespace atm::infrastructure::sql {
             // clear previous parameter bindings before the next loop iteration
             sqlite3_clear_bindings(stmt.get());
 
-            // bind parameters to the placeholders (?) and ensure the operation succeeds
             if (sqlite3_bind_int64(stmt.get(), 1, denomination_val) != SQLITE_OK ||
-                sqlite3_bind_int(stmt.get(), 2, static_cast<int>(count_val)) != SQLITE_OK) {
+                sqlite3_bind_int64(stmt.get(), 2, static_cast<std::int64_t>(count_val)) != SQLITE_OK) {
                 throw StorageError("CashRepository::save bind", SQLITE_ERROR, sqlite3_errmsg(handle));
             }
 

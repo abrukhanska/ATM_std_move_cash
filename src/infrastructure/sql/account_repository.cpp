@@ -1,34 +1,62 @@
-#include <sqlite3.h>
-
 #include "infrastructure/sql/account_repository.hpp"
 #include "infrastructure/sql/database.hpp"
 #include "infrastructure/sql/storage_error.hpp"
 
+#include <sqlite3.h>
+
 namespace atm::infrastructure::sql {
 
-    struct SqliteStmtDeleter {
+    struct StmtFinalizer {
         void operator()(sqlite3_stmt* stmt) const noexcept {
             if (stmt) {
                 sqlite3_finalize(stmt);
             }
         }
     };
-    using Stmt = std::unique_ptr<sqlite3_stmt, SqliteStmtDeleter>;
+    using Stmt = std::unique_ptr<sqlite3_stmt, StmtFinalizer>;
 
     namespace {
         domain::Account extractAccount(sqlite3_stmt* stmt) {
             domain::AccountId id = sqlite3_column_int64(stmt, 0);
+            if (id <= 0) {
+                throw StorageError("AccountRepository::extractAccount", SQLITE_CORRUPT, "Invalid account_id");
+            }
+
             // using reinterpret_cast to cast from const unsigned char* to const char*,
             // since the C++ compiler refuses to do it automatically or via static_cast.
-            const char* card_number_text = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
-            std::string card_number = card_number_text ? card_number_text : "";
-            std::int64_t balance_kop = sqlite3_column_int64(stmt, 2);
-            bool is_primary = sqlite3_column_int(stmt, 3) != 0;
+            domain::CardNumber parsed_card_number = [&]() {
+                const auto* card_number_ptr = reinterpret_cast<const char*>(sqlite3_column_text(stmt, 1));
+                if (!card_number_ptr) {
+                    throw StorageError("AccountRepository::extractAccount", SQLITE_CORRUPT, "Null card_number");
+                }
+                int card_number_length = sqlite3_column_bytes(stmt, 1);
+                try {
+                    return domain::CardNumber::parse(std::string_view(card_number_ptr, static_cast<std::size_t>(card_number_length)));
+                } catch (const std::invalid_argument&) {
+                    throw StorageError("AccountRepository::extractAccount", SQLITE_CORRUPT, "Invalid card_number");
+                }
+            }();
+            
+            domain::Money balance_kop = [&]() {
+                try {
+                    return domain::Money::ofKopiykas(sqlite3_column_int64(stmt, 2));
+                } catch (const domain::DomainError&) {
+                    throw StorageError("AccountRepository::extractAccount", SQLITE_CORRUPT, "Invalid balance_kop");
+                }
+            }();
+            
+            bool is_primary = [&]() {
+                std::int64_t is_primary_int64 = sqlite3_column_int64(stmt, 3);
+                if (is_primary_int64 != 0 && is_primary_int64 != 1) {
+                    throw StorageError("AccountRepository::extractAccount", SQLITE_CORRUPT, "Invalid is_primary");
+                }
+                return is_primary_int64 == 1;
+            }();
 
             return domain::Account(
                 id,
-                domain::CardNumber::parse(card_number),
-                domain::Money::ofKopiykas(balance_kop),
+                parsed_card_number,
+                balance_kop,
                 is_primary
             );
         }
@@ -74,7 +102,7 @@ namespace atm::infrastructure::sql {
         Stmt stmt(stmt_ptr);
         std::string card_number = number.str();
     
-        if (sqlite3_bind_text(stmt.get(), 1, card_number.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK) {
+        if (sqlite3_bind_text(stmt.get(), 1, card_number.data(), static_cast<int>(card_number.size()), SQLITE_TRANSIENT) != SQLITE_OK) {
             throw StorageError("AccountRepository::findPrimary bind", SQLITE_ERROR, sqlite3_errmsg(handle));
         }
 
@@ -100,7 +128,7 @@ namespace atm::infrastructure::sql {
         Stmt stmt(stmt_ptr);
         std::string card_number = number.str();
 
-        if (sqlite3_bind_text(stmt.get(), 1, card_number.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK) {
+        if (sqlite3_bind_text(stmt.get(), 1, card_number.data(), static_cast<int>(card_number.size()), SQLITE_TRANSIENT) != SQLITE_OK) {
             throw StorageError("AccountRepository::listByCard bind", SQLITE_ERROR, sqlite3_errmsg(handle));
         }
 
@@ -134,7 +162,7 @@ namespace atm::infrastructure::sql {
         int is_primary = account.isPrimary() ? 1 : 0;
 
         if (sqlite3_bind_int64(stmt.get(), 1, account_id) != SQLITE_OK ||
-            sqlite3_bind_text(stmt.get(), 2, card_number.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK ||
+            sqlite3_bind_text(stmt.get(), 2, card_number.data(), static_cast<int>(card_number.size()), SQLITE_TRANSIENT) != SQLITE_OK ||
             sqlite3_bind_int64(stmt.get(), 3, balance_kop) != SQLITE_OK ||
             sqlite3_bind_int(stmt.get(), 4, is_primary) != SQLITE_OK) {
             

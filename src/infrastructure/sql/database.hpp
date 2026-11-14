@@ -12,9 +12,9 @@ struct sqlite3;
 
 namespace atm::infrastructure::sql {
 
-    // RAII Deleter for SQLite connection handle
+    // RAII Closer for SQLite connection handle
     // closes DB on destruction or init failure
-    struct SqliteDeleter { void operator()(sqlite3* db) const noexcept; };
+    struct SqliteCloser { void operator()(sqlite3* db) const noexcept; };
 
     class Database : public domain::IStorage {
     public:
@@ -34,7 +34,7 @@ namespace atm::infrastructure::sql {
         void commit() override;
         void rollback() noexcept override;
 
-        [[nodiscard]] sqlite3* handle() const noexcept { return handle_.get(); }
+        [[nodiscard]] sqlite3* handle() const;
         bool broken() const noexcept override { return broken_; }
 
     private:
@@ -43,7 +43,7 @@ namespace atm::infrastructure::sql {
         CashRepository cash_;
         JournalRepository journal_;
 
-        std::unique_ptr<sqlite3, SqliteDeleter> handle_{nullptr};
+        std::unique_ptr<sqlite3, SqliteCloser> handle_{nullptr};
         bool broken_{false};
 
         void init();

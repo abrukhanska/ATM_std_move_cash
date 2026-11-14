@@ -9,7 +9,7 @@ FetchContent_Declare(
 
 FetchContent_GetProperties(sqlite3_src)
 if(NOT sqlite3_src_POPULATED)
-    FetchContent_Populate(sqlite3_src)
+    FetchContent_MakeAvailable(sqlite3_src)
     add_library(sqlite3 STATIC "${sqlite3_src_SOURCE_DIR}/sqlite3.c")
     target_include_directories(sqlite3 PUBLIC "${sqlite3_src_SOURCE_DIR}")
 endif()
