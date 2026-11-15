@@ -46,7 +46,11 @@ namespace atm::infrastructure::sql {
             if (sqlite3_column_type(stmt, column) == SQLITE_NULL) {
                 return std::nullopt;
             }
-            return sqlite3_column_int64(stmt, column);
+            std::int64_t id = sqlite3_column_int64(stmt, column);
+            if (id <= 0) {
+                throw StorageError("JournalRepository::extractPayeeId", SQLITE_CORRUPT, "Invalid payee_id");
+            }
+            return id;
         }
 
         domain::CardNumber extractCard(sqlite3_stmt* stmt, int column) {
@@ -82,8 +86,16 @@ namespace atm::infrastructure::sql {
         domain::JournalEntry extractEntry(sqlite3_stmt* stmt) {
             domain::JournalEntry entry;
             entry.id = sqlite3_column_int64(stmt, 0);
+            if (entry.id <= 0) {
+                throw StorageError("JournalRepository::extractEntry", SQLITE_CORRUPT, "Invalid journal_id");
+            }
+
             entry.atUtc = sqlite3_column_int64(stmt, 1);
+
             entry.localDay = extractString(stmt, 2);
+            if (entry.localDay.size() != 10) {
+                throw StorageError("JournalRepository::extractEntry", SQLITE_CORRUPT, "Invalid local_day");
+            }
 
             std::string kind_str = extractString(stmt, 3);
             auto optional_kind = domain::toEntryKind(kind_str);
@@ -125,7 +137,7 @@ namespace atm::infrastructure::sql {
             return entry;
         }
 
-        int bindInt(sqlite3_stmt* stmt, int column, std::optional<std::int64_t> val) {
+        int bindInt64(sqlite3_stmt* stmt, int column, std::optional<std::int64_t> val) {
             return val ? sqlite3_bind_int64(stmt, column, *val) : sqlite3_bind_null(stmt, column);
         }
 
@@ -167,8 +179,8 @@ namespace atm::infrastructure::sql {
             sqlite3_bind_text(stmt.get(), 2, entry.localDay.data(), static_cast<int>(entry.localDay.size()), SQLITE_TRANSIENT) != SQLITE_OK ||
             sqlite3_bind_text(stmt.get(), 3, kind_sv.data(), static_cast<int>(kind_sv.size()), SQLITE_TRANSIENT) != SQLITE_OK ||
             sqlite3_bind_text(stmt.get(), 4, actor.data(), static_cast<int>(actor.size()), SQLITE_TRANSIENT) != SQLITE_OK ||
-            bindInt(stmt.get(), 5, entry.account ? std::make_optional(static_cast<std::int64_t>(*entry.account)) : std::nullopt) != SQLITE_OK ||
-            bindInt(stmt.get(), 6, entry.target ? std::make_optional(static_cast<std::int64_t>(*entry.target)) : std::nullopt) != SQLITE_OK ||
+            bindInt64(stmt.get(), 5, entry.account ? std::make_optional(static_cast<std::int64_t>(*entry.account)) : std::nullopt) != SQLITE_OK ||
+            bindInt64(stmt.get(), 6, entry.target ? std::make_optional(static_cast<std::int64_t>(*entry.target)) : std::nullopt) != SQLITE_OK ||
             bindString(stmt.get(), 7, subject_card) != SQLITE_OK ||
             sqlite3_bind_int64(stmt.get(), 8, entry.amount.kopiykas()) != SQLITE_OK ||
             sqlite3_bind_int64(stmt.get(), 9, uah100) != SQLITE_OK ||
@@ -176,7 +188,7 @@ namespace atm::infrastructure::sql {
             sqlite3_bind_int64(stmt.get(), 11, uah500) != SQLITE_OK ||
             sqlite3_bind_int64(stmt.get(), 12, uah1000) != SQLITE_OK ||
             sqlite3_bind_int64(stmt.get(), 13, uah2000) != SQLITE_OK ||
-            bindInt(stmt.get(), 14, entry.payeeId.value_or(0) > 0 ? entry.payeeId : std::nullopt) != SQLITE_OK ||
+            bindInt64(stmt.get(), 14, entry.payeeId.value_or(0) > 0 ? entry.payeeId : std::nullopt) != SQLITE_OK ||
             bindString(stmt.get(), 15, entry.requisite.empty() ? std::nullopt : std::make_optional(entry.requisite)) != SQLITE_OK) {
             throw StorageError("JournalRepository::append bind", SQLITE_ERROR, sqlite3_errmsg(handle));
         }
