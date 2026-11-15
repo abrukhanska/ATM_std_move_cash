@@ -17,10 +17,13 @@ namespace atm::infrastructure::sql {
 
     namespace {
         std::string extractString(sqlite3_stmt* stmt, int column) {
-           const auto* text_ptr = reinterpret_cast<const char*>(sqlite3_column_text(stmt, column));
+            if (sqlite3_column_type(stmt, column) == SQLITE_NULL) {
+                throw StorageError("CardRepository::extractCard", SQLITE_CORRUPT, std::string("Null ") + std::to_string(column));
+            }
+            const auto* text_ptr = reinterpret_cast<const char*>(sqlite3_column_text(stmt, column));
             int length = sqlite3_column_bytes(stmt, column);
             if (!text_ptr || length <= 0) {
-                return {};
+                throw StorageError("CardRepository::extractCard", SQLITE_CORRUPT, std::string("Empty ") + std::to_string(column));
             }
             return std::string(text_ptr, static_cast<std::size_t>(length));
         }
@@ -88,7 +91,7 @@ namespace atm::infrastructure::sql {
         Stmt stmt(stmt_ptr);
         std::string card_number = number.str();
 
-        if (sqlite3_bind_text(stmt.get(), 1, card_number.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK) {
+        if (sqlite3_bind_text(stmt.get(), 1, card_number.c_str(), static_cast<int>(card_number.size()), SQLITE_TRANSIENT) != SQLITE_OK) {
             throw StorageError("CardRepository::find bind", SQLITE_ERROR, sqlite3_errmsg(handle));
         }
 
@@ -112,9 +115,9 @@ namespace atm::infrastructure::sql {
         }
 
         Stmt stmt(stmt_ptr);
-        std::string status_retained = "Retained";
+        const auto status_retained = domain::toString(domain::CardStatus::Retained);
 
-        if (sqlite3_bind_text(stmt.get(), 1, status_retained.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK) {
+        if (sqlite3_bind_text(stmt.get(), 1, status_retained.data(), static_cast<int>(status_retained.size()), SQLITE_TRANSIENT) != SQLITE_OK) {
             throw StorageError("CardRepository::listRetained bind", SQLITE_ERROR, sqlite3_errmsg(handle));
         }
 
@@ -148,12 +151,12 @@ namespace atm::infrastructure::sql {
         int failed_attempts = static_cast<int>(card.failedAttempts());
         std::string card_number = card.number().str();
 
-        if (sqlite3_bind_text(stmt.get(), 1, holder_name.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK ||
-            sqlite3_bind_text(stmt.get(), 2, pin_hash.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK ||
+        if (sqlite3_bind_text(stmt.get(), 1, holder_name.data(), static_cast<int>(holder_name.size()), SQLITE_TRANSIENT) != SQLITE_OK ||
+            sqlite3_bind_text(stmt.get(), 2, pin_hash.data(), static_cast<int>(pin_hash.size()), SQLITE_TRANSIENT) != SQLITE_OK ||
             sqlite3_bind_text(stmt.get(), 3, kind_sv.data(), static_cast<int>(kind_sv.size()), SQLITE_TRANSIENT) != SQLITE_OK ||
             sqlite3_bind_text(stmt.get(), 4, status_sv.data(), static_cast<int>(status_sv.size()), SQLITE_TRANSIENT) != SQLITE_OK ||
             sqlite3_bind_int(stmt.get(),  5, failed_attempts) != SQLITE_OK ||
-            sqlite3_bind_text(stmt.get(), 6, card_number.c_str(), -1, SQLITE_TRANSIENT) != SQLITE_OK) {
+            sqlite3_bind_text(stmt.get(), 6, card_number.data(), static_cast<int>(card_number.size()), SQLITE_TRANSIENT) != SQLITE_OK) {
             
             throw StorageError("CardRepository::save bind", SQLITE_ERROR, sqlite3_errmsg(handle));
         }
