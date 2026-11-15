@@ -41,12 +41,12 @@ namespace {
         } };
 
         Fixture() {
-            storage.cards().save(Card(client, "Client", "hash", CardKind::Client));
-            storage.cards().save(Card(other, "Other", "hash", CardKind::Client));
-            storage.accounts().save(Account(1, client, Money::uah(30'000), true));
-            storage.accounts().save(Account(2, client, Money::uah(1'000)));
-            storage.accounts().save(Account(3, other, Money::uah(2'000), true));
-            storage.cash().save(cash);
+            storage.seed(Card(client, "Client", "hash", CardKind::Client));
+            storage.seed(Card(other, "Other", "hash", CardKind::Client));
+            storage.seed(Account(1, client, Money::uah(30'000), true));
+            storage.seed(Account(2, client, Money::uah(1'000)));
+            storage.seed(Account(3, other, Money::uah(2'000), true));
+            storage.seed(cash);
         }
 
         Money balance(AccountId id) {
@@ -189,7 +189,7 @@ namespace {
 
     TEST(PaymentServiceTest, P1RejectsMalformedRequisitesWithoutChanges) {
         Fixture f;
-        constexpr std::string_view bad[]{
+        const std::string_view bad[]{
             "", "050123456", "05012345678", "050123456a", "+380501234567",
             "050 123 4567", "050-123-4567", " 501234567", "0501234567 ",
             "05012345\xD9\xA7", std::string_view{ "05012\0" "4567", 10 }
@@ -228,9 +228,9 @@ namespace {
         EXPECT_DOMAIN_ERROR((void)f.service.pay(f.client, 9, kCharity, "", amount), ErrorReason::UnknownAccount);
         EXPECT_DOMAIN_ERROR((void)f.service.pay(f.client, 3, kCharity, "", amount), ErrorReason::AccessDenied);
 
-        f.storage.cards().save(Card(f.client, "Client", "hash", CardKind::Service));
+        f.storage.seed(Card(f.client, "Client", "hash", CardKind::Service));
         EXPECT_DOMAIN_ERROR((void)f.service.pay(f.client, 2, kCharity, "", amount), ErrorReason::AccessDenied);
-        f.storage.cards().save(Card(f.client, "Client", "hash", CardKind::Client, CardStatus::Retained, 3));
+        f.storage.seed(Card(f.client, "Client", "hash", CardKind::Client, CardStatus::Retained, 3));
         EXPECT_DOMAIN_ERROR((void)f.service.pay(f.client, 2, kCharity, "", amount), ErrorReason::AccessDenied);
         f.expectUnchanged();
     }

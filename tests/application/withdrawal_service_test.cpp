@@ -15,12 +15,9 @@
 #include "application/detail/access.hpp"
 #include "domain/domain_error.hpp"
 #include "domain/istorage.hpp"
-#include "infrastructure/in_memory_account_repository.hpp"
-#include "infrastructure/in_memory_card_repository.hpp"
-#include "infrastructure/in_memory_cash_repository.hpp"
-#include "infrastructure/in_memory_journal_repository.hpp"
 #include "support/domain_assertions.hpp"
 #include "support/mini_test.hpp"
+#include "support/transactional_test_storage.hpp"
 
 namespace {
 
@@ -34,87 +31,8 @@ namespace {
         std::vector<Money>
     >);
 
-    class InjectedStorageFailure final : public std::runtime_error {
-    public:
-        using std::runtime_error::runtime_error;
-    };
-
-    // Exercise the service's transaction boundary with fault injection.
-    // The existing in-memory adapter itself does not restore state on rollback.
-    class TestStorage final : public IStorage, private IJournalRepository {
-    public:
-        enum class Failure { None, Append, Commit };
-
-        Failure failure = Failure::None;
-        std::optional<Money> withdrawnTodayOverride;
-        int commits = 0;
-        int rollbacks = 0;
-
-        ICardRepository& cards() override { return data_.cards; }
-        IAccountRepository& accounts() override { return data_.accounts; }
-        ICashRepository& cash() override { return data_.cash; }
-        IJournalRepository& journal() override { return *this; }
-
-        void begin() override {
-            if (before_) {
-                throw std::logic_error("Unexpected nested transaction");
-            }
-            before_.emplace(data_);
-        }
-
-        void commit() override {
-            if (failure == Failure::Commit) {
-                throw InjectedStorageFailure("Injected commit failure");
-            }
-            before_.reset();
-            ++commits;
-        }
-
-        void rollback() noexcept override {
-            if (before_) {
-                data_ = std::move(*before_);
-                before_.reset();
-                ++rollbacks;
-            }
-        }
-
-        bool broken() const noexcept override { return false; }
-
-    private:
-        JournalEntry append(const JournalEntry& entry) override {
-            auto saved = data_.journal.append(entry);
-            if (failure == Failure::Append) {
-                throw InjectedStorageFailure("Injected append failure after write");
-            }
-            return saved;
-        }
-
-        std::vector<JournalEntry> last(std::size_t count) const override {
-            return data_.journal.last(count);
-        }
-
-        Money withdrawnOn(const CardNumber& card, const std::string& day) const override {
-            if (withdrawnTodayOverride) {
-                return *withdrawnTodayOverride;
-            }
-            return data_.journal.withdrawnOn(card, day);
-        }
-
-        Money sumAmount(EntryKind kind) const override {
-            return data_.journal.sumAmount(kind);
-        }
-
-        struct State {
-            atm::infrastructure::InMemoryCardRepository cards;
-            atm::infrastructure::InMemoryAccountRepository accounts;
-            atm::infrastructure::InMemoryCashRepository cash;
-            atm::infrastructure::InMemoryJournalRepository journal;
-        };
-
-        static_assert(std::is_nothrow_move_assignable_v<State>);
-        State data_;
-        std::optional<State> before_;
-    };
+    using atm::test_support::TestStorage;
+    using atm::test_support::InjectedStorageFailure;
 
     TimePoint localBeforeMidnight() {
         std::tm date{};
@@ -146,12 +64,12 @@ namespace {
         } };
 
         Fixture() {
-            storage.cards().save(Card(client, "Client", "hash", CardKind::Client));
-            storage.cards().save(Card(other, "Other client", "hash", CardKind::Client));
-            storage.accounts().save(Account(1, client, Money::uah(30'000), true));
-            storage.accounts().save(Account(2, client, Money::uah(30'000)));
-            storage.accounts().save(Account(3, other, Money::uah(30'000), true));
-            storage.cash().save(BanknoteSet{}.with(Denomination::UAH100, 200));
+            storage.seed(Card(client, "Client", "hash", CardKind::Client));
+            storage.seed(Card(other, "Other client", "hash", CardKind::Client));
+            storage.seed(Account(1, client, Money::uah(30'000), true));
+            storage.seed(Account(2, client, Money::uah(30'000)));
+            storage.seed(Account(3, other, Money::uah(30'000), true));
+            storage.seed(BanknoteSet{}.with(Denomination::UAH100, 200));
         }
 
         Money balance(AccountId id) {
@@ -219,12 +137,12 @@ namespace {
         Fixture f;
         const auto operatorCard = CardNumber::parse("4000000000000003");
         const auto retained = CardNumber::parse("4000000000000004");
-        f.storage.cards().save(Card(operatorCard, "Operator", "hash", CardKind::Service));
-        f.storage.cards().save(Card(retained, "Retained", "hash", CardKind::Client, CardStatus::Retained, 3));
+        f.storage.seed(Card(operatorCard, "Operator", "hash", CardKind::Service));
+        f.storage.seed(Card(retained, "Retained", "hash", CardKind::Client, CardStatus::Retained, 3));
         // Synthetic accounts isolate the role/status checks from the ownership check.
         const auto initialBalance = Money::uah(30'000);
-        f.storage.accounts().save(Account(4, operatorCard, initialBalance));
-        f.storage.accounts().save(Account(5, retained, initialBalance));
+        f.storage.seed(Account(4, operatorCard, initialBalance));
+        f.storage.seed(Account(5, retained, initialBalance));
 
         const auto beforeCash = f.storage.cash().load();
         const auto amount = Money::uah(100);
@@ -249,8 +167,8 @@ namespace {
     TEST(WithdrawalServiceTest, W2ChecksBalanceThenDailyLimitThenCash) {
         Fixture f;
         (void)f.service.withdraw(f.client, 1, Money::uah(10'000));
-        f.storage.cash().save(BanknoteSet{});
-        f.storage.accounts().save(Account(2, f.client, Money{}));
+        f.storage.seed(BanknoteSet{});
+        f.storage.seed(Account(2, f.client, Money{}));
 
         EXPECT_DOMAIN_ERROR((void)f.service.withdraw(f.client, 2, Money::uah(100)),
             ErrorReason::InsufficientFunds);
@@ -335,7 +253,7 @@ namespace {
         Fixture f;
         const auto operatorCard = CardNumber::parse("4000000000000003");
         const auto missing = CardNumber::parse("4000000000000009");
-        f.storage.cards().save(Card(operatorCard, "Operator", "hash", CardKind::Service));
+        f.storage.seed(Card(operatorCard, "Operator", "hash", CardKind::Service));
         EXPECT_EQ(atm::application::detail::requireOperator(f.storage, operatorCard).number(),
             operatorCard);
         EXPECT_DOMAIN_ERROR((void)atm::application::detail::requireOperator(f.storage, f.client),

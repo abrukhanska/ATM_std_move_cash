@@ -45,16 +45,16 @@ namespace {
             return now;
         } };
         Fixture() {
-            storage.cards().save(Card(operatorCard, "Operator", "hash", CardKind::Service));
-            storage.cards().save(Card(client, "Client", "hash", CardKind::Client));
-            storage.cards().save(Card(retained, "Retained", "hash", CardKind::Client, CardStatus::Retained, 3));
-            storage.accounts().save(Account(1, client, Money::uah(30'000), true));
-            storage.accounts().save(Account(2, client, Money::uah(20'000)));
+            storage.seed(Card(operatorCard, "Operator", "hash", CardKind::Service));
+            storage.seed(Card(client, "Client", "hash", CardKind::Client));
+            storage.seed(Card(retained, "Retained", "hash", CardKind::Client, CardStatus::Retained, 3));
+            storage.seed(Account(1, client, Money::uah(30'000), true));
+            storage.seed(Account(2, client, Money::uah(20'000)));
             BanknoteSet cash;
             for (const auto denomination : atm::domain::kAllDenominations) {
                 cash = cash.with(denomination, 50);
             }
-            storage.cash().save(cash);
+            storage.seed(cash);
         }
 
         BanknoteSet cash() { return storage.cash().load(); }
@@ -78,7 +78,7 @@ namespace {
 
     TEST(SV1Cash, InventoryReturnsExactCashAndChangesNothing) {
         Fixture f;
-        f.storage.cash().save(notes(1, 2, 3, 4, 5));
+        f.storage.seed(notes(1, 2, 3, 4, 5));
         const auto before = f.cash();
         const auto journalBefore = f.journal();
         EXPECT_EQ(f.service.inventory(f.operatorCard), notes(1, 2, 3, 4, 5));
@@ -177,7 +177,7 @@ namespace {
     TEST(SV1Cash, LoadCountOverflowIsRejectedWithoutChange) {
         Fixture f;
         constexpr std::uint32_t kMax = (std::numeric_limits<std::uint32_t>::max)();
-        f.storage.cash().save(BanknoteSet{}.with(Denomination::UAH100, kMax));
+        f.storage.seed(BanknoteSet{}.with(Denomination::UAH100, kMax));
         const auto before = f.cash();
         const auto journalBefore = f.journal();
         EXPECT_DOMAIN_ERROR((void)f.service.load(f.operatorCard, notes(1, 0, 0, 0, 0)), ErrorReason::Overflow);
@@ -207,7 +207,7 @@ namespace {
 
     TEST(SV1Cash, LoadedNotesBecomeAvailableForWithdrawal) {
         Fixture f;
-        f.storage.cash().save(BanknoteSet{});
+        f.storage.seed(BanknoteSet{});
         (void)f.service.load(f.operatorCard, notes(0, 0, 2, 0, 0));
         AtmConfig config;
         WithdrawalService withdrawal(f.storage, config, [&f] { return f.now; });

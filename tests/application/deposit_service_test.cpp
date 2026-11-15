@@ -32,12 +32,12 @@ namespace {
         } };
 
         Fixture() {
-            storage.cards().save(Card(client, "Client", "hash", CardKind::Client));
-            storage.cards().save(Card(other, "Other client", "hash", CardKind::Client));
-            storage.accounts().save(Account(1, client, Money::uah(2'000), true));
-            storage.accounts().save(Account(2, client, Money::uah(1'000)));
-            storage.accounts().save(Account(3, other, Money::uah(3'000), true));
-            storage.cash().save(BanknoteSet{}.with(Denomination::UAH100, 3)
+            storage.seed(Card(client, "Client", "hash", CardKind::Client));
+            storage.seed(Card(other, "Other client", "hash", CardKind::Client));
+            storage.seed(Account(1, client, Money::uah(2'000), true));
+            storage.seed(Account(2, client, Money::uah(1'000)));
+            storage.seed(Account(3, other, Money::uah(3'000), true));
+            storage.seed(BanknoteSet{}.with(Denomination::UAH100, 3)
                 .with(Denomination::UAH500, 2));
         }
 
@@ -116,10 +116,10 @@ namespace {
         const auto operatorCard = CardNumber::parse("4000000000000003");
         const auto retained = CardNumber::parse("4000000000000004");
         const auto balance = Money::uah(1'000);
-        f.storage.cards().save(Card(operatorCard, "Operator", "hash", CardKind::Service));
-        f.storage.cards().save(Card(retained, "Retained", "hash", CardKind::Client, CardStatus::Retained, 3));
-        f.storage.accounts().save(Account(4, operatorCard, balance));
-        f.storage.accounts().save(Account(5, retained, balance));
+        f.storage.seed(Card(operatorCard, "Operator", "hash", CardKind::Service));
+        f.storage.seed(Card(retained, "Retained", "hash", CardKind::Client, CardStatus::Retained, 3));
+        f.storage.seed(Account(4, operatorCard, balance));
+        f.storage.seed(Account(5, retained, balance));
 
         EXPECT_DOMAIN_ERROR((void)f.service.deposit(operatorCard, 4, notes), ErrorReason::AccessDenied);
         EXPECT_DOMAIN_ERROR((void)f.service.deposit(retained, 5, notes), ErrorReason::AccessDenied);
@@ -131,7 +131,7 @@ namespace {
         Fixture f;
         const auto initialCash = f.storage.cash().load();
         const auto maximum = Money::ofKopiykas((std::numeric_limits<std::int64_t>::max)());
-        f.storage.accounts().save(Account(2, f.client, maximum));
+        f.storage.seed(Account(2, f.client, maximum));
 
         const auto notes = BanknoteSet{}.with(Denomination::UAH100, 1);
         EXPECT_DOMAIN_ERROR((void)f.service.deposit(f.client, 2, notes), ErrorReason::Overflow);
@@ -142,7 +142,7 @@ namespace {
         Fixture f;
         const auto maximum = (std::numeric_limits<std::uint32_t>::max)();
         const auto initialCash = BanknoteSet{}.with(Denomination::UAH100, maximum);
-        f.storage.cash().save(initialCash);
+        f.storage.seed(initialCash);
 
         const auto notes = BanknoteSet{}.with(Denomination::UAH100, 1);
         EXPECT_DOMAIN_ERROR((void)f.service.deposit(f.client, 2, notes), ErrorReason::Overflow);

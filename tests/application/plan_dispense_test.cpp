@@ -31,7 +31,7 @@ namespace {
         Denomination::UAH100, Denomination::UAH200, Denomination::UAH500,
         Denomination::UAH1000, Denomination::UAH2000
     };
-    // Independent reference values: do not derive expectations from production helpers.
+
     constexpr std::array<std::int64_t, 5> kUnits{ 1, 2, 5, 10, 20 };
 
     BanknoteSet makeSet(const Counts& counts) {
@@ -93,7 +93,6 @@ namespace {
         }
     }
 
-    // Used only for small counts: enumerate every combination without pruning.
     std::size_t checkAgainstReference(const Counts& counts) {
         std::int64_t capacity = 0;
         for (std::size_t i = 0; i < counts.size(); ++i) {
@@ -293,8 +292,6 @@ namespace {
     }
 
     TEST(PlanDispenseTest, HugeImpossibleCombinationWithMaximumCountsIsRejected) {
-        // A regression case for excessive backtracking. Set a CTest TIMEOUT
-        // for the executable; avoid machine-dependent millisecond assertions.
         constexpr auto maxCount = (std::numeric_limits<std::uint32_t>::max)();
         const auto available = makeSet({ 0, maxCount, 0, 0, maxCount });
         const auto amount = Money::uah(static_cast<std::int64_t>(maxCount) * 2'000 + 100);
@@ -319,7 +316,6 @@ namespace {
     }
 
     TEST(PlanDispenseTest, ExhaustiveCountsZeroThroughThreeMatchIndependentReference) {
-        // 4^5 = 1,024 inventories; check every positive target up to capacity + 2,000 UAH.
         std::size_t checked = 0;
         for (std::uint32_t code = 0; code < 1'024; ++code) {
             Counts counts{};
