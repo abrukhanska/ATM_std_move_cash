@@ -178,4 +178,34 @@ TEST(DB2CardRepository, RejectsOutOfRangeNumbersBeforeNarrowing) {
     }
 }
 
+TEST(CardRepository, ListsOnlyRetainedCards) {
+    const std::string db_path = "test_db.db";
+    if (std::filesystem::exists(db_path)) {
+        std::filesystem::remove(db_path);
+    }
+
+    {
+        Database db(db_path);
+        CardRepository repo(db);
+
+        int rc = sqlite3_exec(
+            db.handle(),
+            "INSERT INTO cards (card_number, holder_name, pin_hash, kind, status, failed_attempts) VALUES "
+            "('4000000000000001', 'Active Client', 'h1', 'Client', 'Active', 0),"
+            "('4000000000000002', 'Retained One', 'h2', 'Client', 'Retained', 3),"
+            "('4000000000000003', 'Retained Two', 'h3', 'Client', 'Retained', 3);",
+            nullptr, nullptr, nullptr);
+        EXPECT_TRUE(rc == SQLITE_OK);
+
+        const auto retained = repo.listRetained();
+        ASSERT_EQ(retained.size(), std::size_t{ 2 });
+        EXPECT_EQ(retained[0].number(), CardNumber::parse("4000000000000002"));
+        EXPECT_EQ(retained[1].number(), CardNumber::parse("4000000000000003"));
+    }
+
+    if (std::filesystem::exists(db_path)) {
+        std::filesystem::remove(db_path);
+    }
+}
+
 } // namespace

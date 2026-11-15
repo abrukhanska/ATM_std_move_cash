@@ -118,8 +118,7 @@ namespace atm::infrastructure::sql {
                 .with(domain::Denomination::UAH1000, uah1000)
                 .with(domain::Denomination::UAH2000, uah2000);
 
-            auto optional_payee = extractPayeeId(stmt, 14);
-            entry.payeeId = optional_payee.value_or(0);
+            entry.payeeId = extractPayeeId(stmt, 14);
 
             entry.requisite = extractString(stmt, 15);
 
