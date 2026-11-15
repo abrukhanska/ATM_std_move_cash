@@ -12,12 +12,6 @@ else()
     add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
-enable_testing()
-
-# Підключаємо вкладені директорії
-add_subdirectory(src)
-add_subdirectory(tests)
-
 include(FetchContent)
 
 FetchContent_Declare(
@@ -26,3 +20,8 @@ FetchContent_Declare(
     GIT_TAG master
 )
 FetchContent_MakeAvailable(picosha2)
+
+enable_testing()
+
+add_subdirectory(src)
+add_subdirectory(tests)

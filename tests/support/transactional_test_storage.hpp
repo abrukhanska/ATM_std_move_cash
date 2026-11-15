@@ -1,6 +1,7 @@
 #ifndef ATM_TEST_SUPPORT_TRANSACTIONAL_TEST_STORAGE_HPP
 #define ATM_TEST_SUPPORT_TRANSACTIONAL_TEST_STORAGE_HPP
 
+#include <algorithm>
 #include <cstddef>
 #include <limits>
 #include <optional>
@@ -79,6 +80,10 @@ namespace atm::test_support {
                 for (const auto& account : owner_.data_.accounts) {
                     if (account.owner() == card) result.push_back(account);
                 }
+                std::sort(result.begin(), result.end(),
+                    [](const domain::Account& left, const domain::Account& right) {
+                        return left.id() < right.id();
+                    });
                 return result;
             }
             void save(const domain::Account& account) override {
