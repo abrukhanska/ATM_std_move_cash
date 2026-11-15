@@ -58,3 +58,5 @@ target_link_libraries(atm_main PRIVATE
     atm_application
     atm_domain
 )
+
+target_include_directories(atm_application PRIVATE ${picosha2_SOURCE_DIR})
