@@ -3,7 +3,7 @@
 
 namespace atm::application {
 
-    domain::CardInspection atm::application::AuthService::inspect(const domain::CardNumber &actor) const
+    domain::CardInspection AuthService::inspect(const domain::CardNumber &actor) const
     {
         const auto card = storage_.cards().find(actor);
         if (!card.has_value()) return domain::CardInspection::Unknown;
@@ -12,7 +12,7 @@ namespace atm::application {
         return domain::CardInspection::Service;
     }
 
-    domain::AuthStatus atm::application::AuthService::authenticate(const domain::CardNumber &actor, const domain::PinCode &pin)
+    domain::AuthStatus AuthService::authenticate(const domain::CardNumber &actor, const domain::PinCode &pin)
     {
         auto card = storage_.cards().find(actor);
         if (!card.has_value()) throw domain::DomainError(domain::ErrorReason::UnknownCard);
@@ -62,7 +62,7 @@ namespace atm::application {
         }
     }
 
-    void atm::application::AuthService::changePin(const domain::CardNumber &actor, const domain::PinCode &oldPin, const domain::PinCode &newPin)
+    void AuthService::changePin(const domain::CardNumber &actor, const domain::PinCode &oldPin, const domain::PinCode &newPin)
     {
         auto card = storage_.cards().find(actor);
         if (!card.has_value()) throw domain::DomainError(domain::ErrorReason::UnknownCard);
