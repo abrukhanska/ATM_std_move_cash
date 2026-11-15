@@ -17,7 +17,6 @@ namespace {
 
     using atm::application::AuthService;
     using atm::application::PinHasher;
-    using atm::domain::AtmConfig;
     using atm::domain::AuthStatus;
     using atm::domain::Card;
     using atm::domain::CardInspection;
@@ -32,13 +31,12 @@ namespace {
     TEST(A1Auth, InspectActiveClientCard) {
         TestStorage storage;
         PinHasher hasher{ 10 };
-        AtmConfig config;
         const auto clientCard = CardNumber::parse("4000000000000002");
         storage.seed(Card(clientCard, "Client", hasher.hash("1234"), CardKind::Client));
 
         int clockCalls = 0;
         const auto now = atm::domain::fromEpochSeconds(1'768'471'200);
-        AuthService service(storage, hasher, config, [&] { ++clockCalls; return now; });
+        AuthService service(storage, hasher, [&] { ++clockCalls; return now; });
 
         EXPECT_EQ(service.inspect(clientCard), CardInspection::Client);
         EXPECT_EQ(storage.commits, 0);
@@ -49,12 +47,11 @@ namespace {
     TEST(A1Auth, CorrectPin) {
         TestStorage storage;
         PinHasher hasher{ 10 };
-        AtmConfig config;
         const auto clientCard = CardNumber::parse("4000000000000002");
         storage.seed(Card(clientCard, "Client", hasher.hash("1234"), CardKind::Client));
 
         const auto now = atm::domain::fromEpochSeconds(1'768'471'200);
-        AuthService service(storage, hasher, config, [&] { return now; });
+        AuthService service(storage, hasher, [&] { return now; });
 
         EXPECT_EQ(service.authenticate(clientCard, PinCode::parse("1234")), AuthStatus::Ok);
 
@@ -67,14 +64,13 @@ namespace {
     TEST(A1Auth, CorrectPinAfterFailedAttempts) {
         TestStorage storage;
         PinHasher hasher{ 10 };
-        AtmConfig config;
         const auto clientCard = CardNumber::parse("4000000000000002");
         const auto wrongPin = PinCode::parse("0000");
         const auto correctPin = PinCode::parse("1234");
         storage.seed(Card(clientCard, "Client", hasher.hash("1234"), CardKind::Client));
 
         const auto now = atm::domain::fromEpochSeconds(1'768'471'200);
-        AuthService service(storage, hasher, config, [&] { return now; });
+        AuthService service(storage, hasher, [&] { return now; });
 
         EXPECT_EQ(service.authenticate(clientCard, wrongPin), AuthStatus::WrongPin);
         EXPECT_EQ(storage.cards().find(clientCard).value().failedAttempts(), std::uint8_t{ 1 });
@@ -94,13 +90,12 @@ namespace {
     TEST(A2Auth, ThreeFailedAttemptsRetainCardAndLogOnce) {
         TestStorage storage;
         PinHasher hasher{ 10 };
-        AtmConfig config;
         const auto clientCard = CardNumber::parse("4000000000000002");
         const auto wrongPin = PinCode::parse("0000");
         storage.seed(Card(clientCard, "Client", hasher.hash("1234"), CardKind::Client));
 
         const auto now = atm::domain::fromEpochSeconds(1'768'471'200);
-        AuthService service(storage, hasher, config, [&] { return now; });
+        AuthService service(storage, hasher, [&] { return now; });
 
         // 2 errors, then exit / cancel
         EXPECT_EQ(service.authenticate(clientCard, wrongPin), AuthStatus::WrongPin);
@@ -130,14 +125,13 @@ namespace {
     TEST(A2Auth, RetainedCardCannotAuthenticate) {
         TestStorage storage;
         PinHasher hasher{ 10 };
-        AtmConfig config;
         const auto clientCard = CardNumber::parse("4000000000000002");
         const auto wrongPin = PinCode::parse("0000");
         const auto correctPin = PinCode::parse("1234");
         storage.seed(Card(clientCard, "Client", hasher.hash("1234"), CardKind::Client));
 
         const auto now = atm::domain::fromEpochSeconds(1'768'471'200);
-        AuthService service(storage, hasher, config, [&] { return now; });
+        AuthService service(storage, hasher, [&] { return now; });
 
         EXPECT_EQ(service.authenticate(clientCard, wrongPin), AuthStatus::WrongPin);
         EXPECT_EQ(service.authenticate(clientCard, wrongPin), AuthStatus::WrongPin);
@@ -152,7 +146,6 @@ namespace {
     TEST(A3Auth, ServiceCardNeverRetainedOnWrongPins) {
         TestStorage storage;
         PinHasher hasher{ 10 };
-        AtmConfig config;
         const auto operatorCard = CardNumber::parse("4000000000000001");
         const auto operatorPin = PinCode::parse("9999");
         const auto wrongPin = PinCode::parse("0000");
@@ -160,7 +153,7 @@ namespace {
 
         int clockCalls = 0;
         const auto now = atm::domain::fromEpochSeconds(1'768'471'200);
-        AuthService service(storage, hasher, config, [&] { ++clockCalls; return now; });
+        AuthService service(storage, hasher, [&] { ++clockCalls; return now; });
 
         EXPECT_EQ(service.inspect(operatorCard), CardInspection::Service);
         EXPECT_EQ(service.authenticate(operatorCard, operatorPin), AuthStatus::Ok);
@@ -183,7 +176,6 @@ namespace {
     TEST(A3Auth, UnknownAndAlreadyRetainedCardsAreRejectedWithoutDatabaseChanges) {
         TestStorage storage;
         PinHasher hasher{ 10 };
-        AtmConfig config;
         const auto retainedCard = CardNumber::parse("4000000000000003");
         const auto unknownCard = CardNumber::parse("9000000000009999");
         const auto pin = PinCode::parse("1234");
@@ -191,7 +183,7 @@ namespace {
 
         int clockCalls = 0;
         const auto now = atm::domain::fromEpochSeconds(1'768'471'200);
-        AuthService service(storage, hasher, config, [&] { ++clockCalls; return now; });
+        AuthService service(storage, hasher, [&] { ++clockCalls; return now; });
 
         EXPECT_EQ(service.inspect(unknownCard), CardInspection::Unknown);
         EXPECT_DOMAIN_ERROR((void)service.authenticate(unknownCard, pin), ErrorReason::UnknownCard);
@@ -221,7 +213,6 @@ namespace {
     TEST(N1Auth, ChangesPinSuccessfully) {
         TestStorage storage;
         PinHasher hasher{ 10 };
-        AtmConfig config;
         const auto clientCard = CardNumber::parse("4000000000000002");
         const auto oldPin = PinCode::parse("1234");
         const auto newPin = PinCode::parse("5678");
@@ -229,7 +220,7 @@ namespace {
         storage.seed(Card(clientCard, "Client", oldHash, CardKind::Client));
 
         const auto now = atm::domain::fromEpochSeconds(1'768'471'200);
-        AuthService service(storage, hasher, config, [&] { return now; });
+        AuthService service(storage, hasher, [&] { return now; });
 
         service.changePin(clientCard, oldPin, newPin);
 
@@ -251,13 +242,12 @@ namespace {
     TEST(N1Auth, RejectsWrongOldPin) {
         TestStorage storage;
         PinHasher hasher{ 10 };
-        AtmConfig config;
         const auto clientCard = CardNumber::parse("4000000000000002");
         const std::string oldHash = hasher.hash("1234");
         storage.seed(Card(clientCard, "Client", oldHash, CardKind::Client, CardStatus::Active, 1));
 
         const auto now = atm::domain::fromEpochSeconds(1'768'471'200);
-        AuthService service(storage, hasher, config, [&] { return now; });
+        AuthService service(storage, hasher, [&] { return now; });
 
         EXPECT_DOMAIN_ERROR(service.changePin(clientCard, PinCode::parse("0000"), PinCode::parse("5678")), ErrorReason::IncorrectPin);
 
@@ -272,13 +262,12 @@ namespace {
     TEST(N1Auth, RejectsSameNewPin) {
         TestStorage storage;
         PinHasher hasher{ 10 };
-        AtmConfig config;
         const auto clientCard = CardNumber::parse("4000000000000002");
         const std::string oldHash = hasher.hash("1234");
         storage.seed(Card(clientCard, "Client", oldHash, CardKind::Client, CardStatus::Active, 1));
 
         const auto now = atm::domain::fromEpochSeconds(1'768'471'200);
-        AuthService service(storage, hasher, config, [&] { return now; });
+        AuthService service(storage, hasher, [&] { return now; });
 
         EXPECT_DOMAIN_ERROR(
             service.changePin(clientCard, PinCode::parse("1234"), PinCode::parse("1234")),

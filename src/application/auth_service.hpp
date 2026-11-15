@@ -11,8 +11,8 @@ namespace atm::application {
 
     class AuthService {
     public:
-        AuthService(domain::IStorage& storage, const PinHasher& pinHasher, const domain::AtmConfig& config, domain::Clock clock)
-            : storage_(storage), pinHasher_(pinHasher), config_(config), clock_(std::move(clock)) {}
+        AuthService(domain::IStorage& storage, const PinHasher& pinHasher, domain::Clock clock)
+            : storage_(storage), pinHasher_(pinHasher), clock_(std::move(clock)) {}
 
         [[nodiscard]] domain::CardInspection inspect(const domain::CardNumber& actor) const;
         domain::AuthStatus authenticate(const domain::CardNumber& actor, const domain::PinCode& pin);
@@ -21,7 +21,6 @@ namespace atm::application {
     private:
         domain::IStorage& storage_;
         const PinHasher& pinHasher_;
-        const domain::AtmConfig& config_;
         domain::Clock clock_;
     };
 
