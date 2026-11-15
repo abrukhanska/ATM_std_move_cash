@@ -1,6 +1,3 @@
-# Project tests use the local mini_test framework.
-# No external test framework needs to be downloaded.
-
 set(ATM_TEST_MAIN
     "${CMAKE_CURRENT_SOURCE_DIR}/support/mini_test_main.cpp"
 )
@@ -61,8 +58,6 @@ add_test(
 )
 
 if(NOT WIN32)
-    # Requires installed time-zone data with the Europe/Kyiv zone.
-    # Windows uses the configured runtime/system time zone.
     set_tests_properties(atm_environment_tests PROPERTIES
         ENVIRONMENT "TZ=Europe/Kyiv"
     )
@@ -156,9 +151,10 @@ if(INFRASTRUCTURE_TEST_SOURCES)
     )
 
     target_link_libraries(atm_infrastructure_tests PRIVATE
-        atm_infrastructure
-        atm_domain
-        sqlite3
+    atm_application
+    atm_infrastructure
+    atm_domain
+    sqlite3
     )
 
     add_test(

@@ -10,3 +10,5 @@ CMakeUserPresets.json
 *.suo
 *.sqlite
 *.sqlite-journal
+*.log
+/build-tests/
