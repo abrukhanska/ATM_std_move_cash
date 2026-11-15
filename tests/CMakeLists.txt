@@ -163,3 +163,32 @@ if(INFRASTRUCTURE_TEST_SOURCES)
     )
 endif()
 
+# --- presentation -----------------------------------------------------------
+
+file(GLOB_RECURSE PRESENTATION_TEST_SOURCES CONFIGURE_DEPENDS
+    "${CMAKE_CURRENT_SOURCE_DIR}/presentation/*.cpp"
+)
+
+if(PRESENTATION_TEST_SOURCES)
+    add_executable(atm_presentation_tests
+        ${PRESENTATION_TEST_SOURCES}
+        ${ATM_TEST_MAIN}
+    )
+
+    target_compile_features(atm_presentation_tests PRIVATE cxx_std_20)
+
+    target_include_directories(atm_presentation_tests PRIVATE
+        "${CMAKE_CURRENT_SOURCE_DIR}"
+    )
+
+    target_link_libraries(atm_presentation_tests PRIVATE
+        atm_presentation
+        atm_application
+        atm_domain
+    )
+
+    add_test(
+        NAME atm_presentation_tests
+        COMMAND atm_presentation_tests
+    )
+endif()
