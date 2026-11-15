@@ -1,6 +1,6 @@
 #include "application/account_service.hpp"
 #include "domain/domain_error.hpp"
-#include "enums.hpp"
+#include "domain/enums.hpp"
 
 namespace atm::application {
     using domain::DomainError;

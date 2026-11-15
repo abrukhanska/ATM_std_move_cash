@@ -1,5 +1,5 @@
-#include "auth_service.hpp"
-#include "transaction.hpp"
+#include "application/auth_service.hpp"
+#include "domain/transaction.hpp"
 
 namespace atm::application {
 

@@ -1,7 +1,7 @@
 #ifndef ATM_APPLICATION_DEVICE_SERVICE_HPP
 #define ATM_APPLICATION_DEVICE_SERVICE_HPP
 
-#include <istorage.hpp>
+#include <domain/istorage.hpp>
 
 namespace atm::application {
 
