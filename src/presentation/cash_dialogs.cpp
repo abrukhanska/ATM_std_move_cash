@@ -40,47 +40,55 @@ namespace atm::presentation {
             return lines;
         }
 
+
         Nav readBanknotes(AtmContext& ctx, domain::BanknoteSet& notes)
         {
             for (std::size_t i = 0; i < denominations.size(); ++i) {
-                const Reply input = ctx.ui.prompt(
-                    "Number of " + denominations[i] +
-                    " banknotes (0 to skip):"
-                );
+                while (true) {
+                    const Reply input = ctx.ui.prompt(
+                        "Number of " + denominations[i] +
+                        " banknotes (0 to skip):"
+                    );
 
-                if (input.nav != Nav::Ok) {
-                    return input.nav;
-                }
-
-                try {
-                    std::size_t pos = 0;
-                    const auto count = std::stoull(input.text, &pos);
-
-                    if (input.text.empty() ||
-                        input.text[0] == '-' ||
-                        pos != input.text.size() ||
-                        count > std::numeric_limits<std::uint32_t>::max()) {
-                        ctx.ui.showError("Invalid banknote count.");
-                        return Nav::Cancel;
+                    if (input.nav != Nav::Ok) {
+                        return input.nav;
                     }
 
-                    notes = notes.with(
-                        domain::kAllDenominations[i],
-                        static_cast<std::uint32_t>(count)
-                    );
-                }
-                catch (const std::invalid_argument&) {
-                    ctx.ui.showError("Invalid banknote count.");
-                    return Nav::Cancel;
-                }
-                catch (const std::out_of_range&) {
-                    ctx.ui.showError("Banknote count is too large.");
-                    return Nav::Cancel;
+                    if (input.text.empty() ||
+                        input.text.find_first_not_of("0123456789") != std::string::npos) {
+                        ctx.ui.showError("Invalid banknote count.");
+                        continue;
+                    }
+
+                    try {
+                        std::size_t pos = 0;
+                        const auto count = std::stoull(input.text, &pos);
+
+                        if (pos != input.text.size() ||
+                            count > std::numeric_limits<std::uint32_t>::max()) {
+                            ctx.ui.showError("Invalid banknote count.");
+                            continue;
+                        }
+
+                        notes = notes.with(
+                            domain::kAllDenominations[i],
+                            static_cast<std::uint32_t>(count)
+                        );
+
+                        break;
+                    }
+                    catch (const std::invalid_argument&) {
+                        ctx.ui.showError("Invalid banknote count.");
+                    }
+                    catch (const std::out_of_range&) {
+                        ctx.ui.showError("Banknote count is too large.");
+                    }
                 }
             }
 
             return Nav::Ok;
         }
+
 
         Nav changeCash(AtmContext& ctx, Session& session, bool loading)
         {

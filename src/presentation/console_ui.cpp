@@ -114,34 +114,44 @@ namespace atm::presentation {
             << RESET << "\n\n";
     }
 
+
     Reply ConsoleUi::prompt(const std::string& message) {
-        out_ << "\n  " << LAVENDER << "> " << RESET
-            << WHITE << message << RESET
-            << "\n  > ";
+        while (true) {
+            out_ << '\n';
 
-        std::string input;
+            printBorder(out_);
+            printLine(out_, "             std::move(cash)");
+            printBorder(out_);
+            printLine(out_, message);
+            printBorder(out_);
 
-        if (!std::getline(in_, input)) {
-            return { Nav::Exit, "", std::nullopt };
+            out_ << "  " << LAVENDER << "> " << RESET;
+
+            std::string input;
+
+            if (!std::getline(in_, input)) {
+                return { Nav::Exit, "", std::nullopt };
+            }
+
+            const std::string command = lowerAscii(trim(input));
+
+            if (command == "cancel") {
+                return { Nav::Cancel, "", std::nullopt };
+            }
+
+            if (command == "exit") {
+                return { Nav::Exit, "", std::nullopt };
+            }
+
+            if (trim(input).empty()) {
+                showError("Input cannot be empty.");
+                continue;
+            }
+
+            return { Nav::Ok, input, std::nullopt };
         }
-
-        const std::string command = lowerAscii(trim(input));
-
-        if (command == "cancel") {
-            return { Nav::Cancel, "", std::nullopt };
-        }
-
-        if (command == "exit") {
-            return { Nav::Exit, "", std::nullopt };
-        }
-
-        if (trim(input).empty()) {
-            showError("Input cannot be empty.");
-            return prompt(message);
-        }
-
-        return { Nav::Ok, input, std::nullopt };
     }
+
 
     Reply ConsoleUi::promptSecret(const std::string& message) {
         return prompt(message);
