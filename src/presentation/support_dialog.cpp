@@ -12,7 +12,8 @@
 
 namespace atm::presentation {
 
-    Nav supportDialog(AtmContext& ctx, Session& session)
+    Nav supportDialog(AtmContext& ctx, Session&)
+
     {
         const std::vector<std::string> problems = {
             "Transaction problem",

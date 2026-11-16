@@ -48,7 +48,6 @@ int main()
         // 1. Configuration
         const domain::AtmConfig config;
 
-        // TODO: звірити тип Clock із domain/types.hpp
         domain::Clock clock = [] {
             return std::chrono::system_clock::now();
             };
@@ -138,7 +137,6 @@ int main()
         // 6. Presentation
         presentation::ConsoleUi ui(std::cin, std::cout);
 
-        // TODO: звірити конструктор ConsoleReceiptPrinter
         presentation::ConsoleReceiptPrinter printer(std::cout);
 
         presentation::LoggingSupportChannel support("support.log");

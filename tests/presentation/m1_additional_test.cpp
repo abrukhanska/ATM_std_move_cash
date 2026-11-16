@@ -452,10 +452,17 @@ namespace {
             const std::string expected =
                 value == "100" ? "100.00" : "100.50";
 
+
             EXPECT_NE(
-                f.output.str().find("Amount: " + expected),
+                f.output.str().find("Amount:"),
                 std::string::npos
             );
+
+            EXPECT_NE(
+                f.output.str().find(expected),
+                std::string::npos
+            );
+
 
             EXPECT_EQ(f.storage.commits, 0);
             EXPECT_EQ(

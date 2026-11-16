@@ -6,6 +6,7 @@
 #include <ctime>
 #include <iomanip>
 #include <sstream>
+#include <ios>
 
 namespace atm::presentation {
 
@@ -71,13 +72,14 @@ namespace atm::presentation {
 
         printField(out_, "Transaction ID: ", std::to_string(entry.id));
         printField(out_, "Date: ", entry.localDay);
+        
         const std::time_t timestamp = static_cast<std::time_t>(entry.atUtc);
-        const std::tm* utc = std::gmtime(&timestamp);
+        const std::tm* local = std::localtime(&timestamp);
 
-        if (utc != nullptr) {
+        if (local != nullptr) {
             std::ostringstream timeStream;
-            timeStream << std::put_time(utc, "%H:%M:%S");
-            printField(out_, "Time (UTC): ", timeStream.str());
+            timeStream << std::put_time(local, "%H:%M:%S");
+            printField(out_, "Time (local): ", timeStream.str());
         }
 
         printField(out_, "Operation: ", std::string(atm::domain::toString(entry.kind)));
@@ -127,12 +129,20 @@ namespace atm::presentation {
             printField(out_, "Subject card: ", entry.subjectCard->masked());
         }
 
+
         printLine(out_, "");
         printLine(out_, "Thank you for using our ATM!", WHITE);
 
         printBorder(out_);
         out_ << '\n';
+
+        out_.flush();
+
+        if (!out_) {
+            throw std::ios_base::failure("Receipt printing failed.");
+        }
     }
+
 
 } // namespace atm::presentation
 

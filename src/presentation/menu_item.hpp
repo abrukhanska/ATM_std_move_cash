@@ -8,7 +8,7 @@
 
 namespace atm::presentation {
 
-    class Session;
+    struct Session;
 
     struct MenuItem {
         std::string title;

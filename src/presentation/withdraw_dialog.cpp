@@ -16,7 +16,7 @@
 #include <vector>
 #include <cstdint>
 #include <limits>
-
+#include <ios>
 
 namespace atm::presentation {
 
@@ -224,9 +224,18 @@ namespace atm::presentation {
 
         const Nav receiptChoice = ctx.ui.confirm("Print receipt?");
 
+
         if (receiptChoice == Nav::Ok) {
-            ctx.printer.print(*entry);
+            try {
+                ctx.printer.print(*entry);
+            }
+            catch (const std::ios_base::failure&) {
+                ctx.ui.showError(
+                    "Withdrawal completed, but receipt printing failed."
+                );
+            }
         }
+
 
         return receiptChoice == Nav::Exit
             ? Nav::Exit
