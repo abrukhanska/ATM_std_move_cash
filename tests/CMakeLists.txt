@@ -192,3 +192,11 @@ if(PRESENTATION_TEST_SOURCES)
         COMMAND atm_presentation_tests
     )
 endif()
+
+
+add_test(
+    NAME atm_st2_check
+    COMMAND ${CMAKE_COMMAND}
+        -DPROJECT_SOURCE_DIR=${PROJECT_SOURCE_DIR}
+        -P ${CMAKE_CURRENT_SOURCE_DIR}/presentation/st2_check.cmake
+)

@@ -605,4 +605,44 @@ namespace {
     }
 
 
+    TEST(M1Additional, WithdrawalNegativeAmountsNoChanges) {
+        const std::vector<std::string> invalid{
+            "-100", "-0.50"
+        };
+
+        for (const auto& value : invalid) {
+            atm::test::TestAtmContext f;
+
+            const auto card =
+                atm::domain::CardNumber::parse("0000000000000001");
+
+            f.storage.seed(atm::domain::Account(
+                1, card, atm::domain::Money::uah(5000), true
+            ));
+
+            atm::presentation::Session session(
+                card, atm::domain::CardKind::Client, 1
+            );
+
+            const auto option =
+                f.withdrawal.quickAmounts().size() + 1;
+
+            f.input.str(
+                std::to_string(option) + "\n" + value + "\n"
+            );
+
+            EXPECT_EQ(
+                atm::presentation::withdrawDialog(f.ctx, session),
+                Nav::Cancel
+            );
+
+            EXPECT_EQ(f.storage.commits, 0);
+            EXPECT_EQ(
+                f.storage.accounts().find(1)->balance(),
+                atm::domain::Money::uah(5000)
+            );
+            EXPECT_TRUE(f.storage.journal().last(1).empty());
+        }
+    }
+
 } // namespace

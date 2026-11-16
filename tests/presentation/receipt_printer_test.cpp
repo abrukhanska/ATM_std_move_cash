@@ -95,6 +95,7 @@ namespace {
         EXPECT_EQ(text.find("Subject card:"), std::string::npos);
     }
 
+
     TEST(SEC1ReceiptPrinter, DoesNotExposeSensitivePinData) {
         std::ostringstream output;
         ConsoleReceiptPrinter printer(output);
@@ -110,6 +111,10 @@ namespace {
         EXPECT_EQ(text.find("pin_hash"), std::string::npos);
         EXPECT_EQ(text.find("PIN:"), std::string::npos);
         EXPECT_EQ(text.find("test-requisite"), std::string::npos);
+
+        EXPECT_EQ(text.find(entry.actor.str()), std::string::npos);
+        EXPECT_NE(text.find(entry.actor.masked()), std::string::npos);
     }
+
 
 } // namespace

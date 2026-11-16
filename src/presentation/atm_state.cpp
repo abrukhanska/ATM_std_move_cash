@@ -8,6 +8,7 @@
 
 #include <exception>
 #include <memory>
+#include <ios>
 
 namespace atm::presentation {
 
@@ -16,8 +17,21 @@ namespace atm::presentation {
         try {
             return doHandle(ctx);
         }
+
+        catch (const std::ios_base::failure&) {
+            // Console output may be unavailable.
+            // Do not continue the current session.
+            ctx.exitRequested = true;
+            return nullptr;
+        }
         catch (const std::exception&) {
-            ctx.ui.showError("Temporarily unavailable.");
+            try {
+                ctx.ui.showError("Temporarily unavailable.");
+            }
+            catch (const std::ios_base::failure&) {
+                ctx.exitRequested = true;
+                return nullptr;
+            }
 
             if (ctx.device.isBroken() || !ctx.device.isInService()) {
                 return std::make_unique<OutOfServiceState>();
@@ -25,6 +39,7 @@ namespace atm::presentation {
 
             return std::make_unique<IdleState>();
         }
+
     }
 
 } // namespace atm::presentation

@@ -1,8 +1,9 @@
+
 #include "presentation/console_ui.hpp"
 
 #include <cctype>
+#include <ios>
 #include <string>
-
 
 namespace atm::presentation {
 
@@ -24,8 +25,6 @@ namespace atm::presentation {
                 << std::string(WIDTH, '-')
                 << "+" << RESET << '\n';
         }
-
-
 
         void printLine(std::ostream& out, const std::string& text) {
             out << PURPLE << "| " << RESET;
@@ -64,7 +63,6 @@ namespace atm::presentation {
 
             out << PURPLE << " |" << RESET << '\n';
         }
-
 
         void printMenuItem(
             std::ostream& out,
@@ -113,6 +111,14 @@ namespace atm::presentation {
             return text;
         }
 
+        void ensureOutput(std::ostream& out) {
+            out.flush();
+
+            if (!out) {
+                throw std::ios_base::failure("Console output failed.");
+            }
+        }
+
     } // namespace
 
     ConsoleUi::ConsoleUi(std::istream& in, std::ostream& out)
@@ -137,13 +143,16 @@ namespace atm::presentation {
 
         printBorder(out_);
         out_ << '\n';
+
+        ensureOutput(out_);
     }
 
     void ConsoleUi::showError(const std::string& message) {
         out_ << RED << "\n  [ERROR] " << message
             << RESET << "\n\n";
-    }
 
+        ensureOutput(out_);
+    }
 
     Reply ConsoleUi::prompt(const std::string& message) {
         while (true) {
@@ -156,6 +165,8 @@ namespace atm::presentation {
             printBorder(out_);
 
             out_ << "  " << LAVENDER << "> " << RESET;
+
+            ensureOutput(out_);
 
             std::string input;
 
@@ -182,7 +193,6 @@ namespace atm::presentation {
         }
     }
 
-
     Reply ConsoleUi::promptSecret(const std::string& message) {
         return prompt(message);
     }
@@ -207,6 +217,8 @@ namespace atm::presentation {
 
             printMenuItem(out_, "[0]", "Cancel", true);
             printBorder(out_);
+
+            ensureOutput(out_);
 
             const Reply reply = prompt("Select an option:");
 
@@ -235,7 +247,6 @@ namespace atm::presentation {
                 }
             }
             catch (const std::exception&) {
-
             }
 
             showError("Invalid menu option.");
@@ -265,3 +276,4 @@ namespace atm::presentation {
     }
 
 } // namespace atm::presentation
+

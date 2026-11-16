@@ -230,9 +230,16 @@ namespace atm::presentation {
                 ctx.printer.print(*entry);
             }
             catch (const std::ios_base::failure&) {
-                ctx.ui.showError(
-                    "Withdrawal completed, but receipt printing failed."
-                );
+                try {
+                    ctx.ui.showError(
+                        "Withdrawal completed, but receipt printing failed."
+                    );
+                }
+                catch (const std::ios_base::failure&) {
+                    // The output stream may also be unavailable.
+                }
+
+                return Nav::Exit;
             }
         }
 
