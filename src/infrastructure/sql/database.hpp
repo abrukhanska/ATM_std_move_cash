@@ -38,13 +38,13 @@ namespace atm::infrastructure::sql {
         bool broken() const noexcept override { return broken_; }
 
     private:
+        std::unique_ptr<sqlite3, SqliteCloser> handle_{nullptr};
+        bool broken_{false};
+
         CardRepository cards_;
         AccountRepository accounts_;
         CashRepository cash_;
         JournalRepository journal_;
-
-        std::unique_ptr<sqlite3, SqliteCloser> handle_{nullptr};
-        bool broken_{false};
 
         void init();
     };
