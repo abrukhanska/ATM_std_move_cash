@@ -179,7 +179,7 @@ namespace atm::presentation {
         ctx.ui.showScreen("Transfer details", {
             "Recipient: " + preview.recipientName,
             "Card: " + preview.toCard.masked(),
-            "Amount: " + preview.amount.format()
+            "Amount: " + preview.amount.format() + " UAH"
             });
 
         const Nav confirmation = ctx.ui.confirm(
@@ -199,6 +199,7 @@ namespace atm::presentation {
                 preview
             );
         }
+
         catch (const domain::DomainError& e) {
             switch (e.reason()) {
             case domain::ErrorReason::InsufficientFunds:
@@ -209,14 +210,19 @@ namespace atm::presentation {
                 ctx.ui.showError("Transfer details are no longer valid.");
                 return Nav::Cancel;
 
+            case domain::ErrorReason::Overflow:
+                ctx.ui.showError("Transfer failed: the amount is too large to process.");
+                return Nav::Cancel;
+
             default:
                 throw;
             }
         }
 
+
         ctx.ui.showScreen("Transfer successful", {
             "Recipient: " + preview.recipientName,
-            "Amount: " + preview.amount.format()
+            "Amount: " + preview.amount.format() + " UAH"
             });
 
         const Nav receiptChoice = ctx.ui.confirm("Print receipt?");

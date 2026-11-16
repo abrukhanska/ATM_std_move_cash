@@ -9,8 +9,8 @@ namespace atm::presentation {
     namespace {
 
         constexpr const char* PURPLE = "\033[95m";
-        constexpr const char* WHITE = "\033[97m";
-        constexpr const char* GREEN = "\033[92m";
+        constexpr const char* WHITE = "\033[38;2;248;250;252m";
+        constexpr const char* GREEN = "\033[38;2;134;239;172m";
         constexpr const char* RED = "\033[91m";
         constexpr const char* PINK = "\033[95m";
         constexpr const char* LAVENDER = "\033[38;2;165;180;252m";
@@ -25,9 +25,38 @@ namespace atm::presentation {
                 << "+" << RESET << '\n';
         }
 
+
+
         void printLine(std::ostream& out, const std::string& text) {
-            out << PURPLE << "| " << RESET
-                << WHITE << text << RESET;
+            out << PURPLE << "| " << RESET;
+
+            const std::size_t colon = text.find(':');
+
+            if (colon != std::string::npos) {
+                const std::string label = text.substr(0, colon + 1);
+                const std::string value = text.substr(colon + 1);
+
+                if (label == "Recipient:" ||
+                    label == "Card:" ||
+                    label == "Amount:" ||
+                    label == "Total:") {
+
+                    out << LAVENDER << label << RESET;
+
+                    if (label == "Amount:" || label == "Total:") {
+                        out << GREEN << value << RESET;
+                    }
+                    else {
+                        out << WHITE << value << RESET;
+                    }
+                }
+                else {
+                    out << WHITE << text << RESET;
+                }
+            }
+            else {
+                out << WHITE << text << RESET;
+            }
 
             if (text.size() < WIDTH - 2) {
                 out << std::string(WIDTH - 2 - text.size(), ' ');
@@ -35,6 +64,7 @@ namespace atm::presentation {
 
             out << PURPLE << " |" << RESET << '\n';
         }
+
 
         void printMenuItem(
             std::ostream& out,

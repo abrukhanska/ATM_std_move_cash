@@ -80,12 +80,26 @@ namespace atm::presentation {
             }
         }
 
-        const domain::Money total = notes.total();
+
+        domain::Money total;
+
+        try {
+            total = notes.total();
+        }
+        catch (const domain::DomainError& e) {
+            if (e.reason() == domain::ErrorReason::Overflow) {
+                ctx.ui.showError("Deposit amount is too large.");
+                return Nav::Cancel;
+            }
+
+            throw;
+        }
 
         if (total == domain::Money::uah(0)) {
             ctx.ui.showError("Deposit amount cannot be zero.");
             return Nav::Cancel;
         }
+
 
         std::vector<std::string> lines;
 
@@ -119,17 +133,22 @@ namespace atm::presentation {
                 notes
             );
         }
+
         catch (const domain::DomainError& e) {
             switch (e.reason()) {
             case domain::ErrorReason::InvalidAmount:
-            case domain::ErrorReason::InvalidData:
-                ctx.ui.showError("Invalid deposit.");
+                ctx.ui.showError("Invalid deposit amount.");
+                return Nav::Cancel;
+
+            case domain::ErrorReason::Overflow:
+                ctx.ui.showError("Deposit failed: the amount is too large to process.");
                 return Nav::Cancel;
 
             default:
                 throw;
             }
         }
+
 
         ctx.ui.showScreen("Deposit successful", {
             "Amount: " + total.format()
