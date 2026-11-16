@@ -1,4 +1,3 @@
-
 #include "presentation/atm_machine.hpp"
 
 #include "presentation/atm_context.hpp"

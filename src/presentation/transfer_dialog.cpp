@@ -13,6 +13,7 @@
 
 #include <stdexcept>
 #include <string>
+#include <limits>
 
 namespace atm::presentation {
 
@@ -49,18 +50,79 @@ namespace atm::presentation {
             return amountInput.nav;
         }
 
+
         domain::Money amount;
 
         try {
-            std::size_t pos = 0;
-            const long long value = std::stoll(amountInput.text, &pos);
+            const std::string& text = amountInput.text;
+            const std::size_t dot = text.find_first_of(".,");
 
-            if (pos != amountInput.text.size() || value <= 0) {
-                ctx.ui.showError("Invalid transfer amount.");
-                return Nav::Cancel;
+            if (text.empty() ||
+                (dot != std::string::npos &&
+                    (dot == 0 || dot == text.size() - 1 ||
+                        text.find_first_of(".,", dot + 1) != std::string::npos ||
+                        text.size() - dot - 1 > 2))) {
+                throw std::invalid_argument("Invalid amount");
             }
 
-            amount = domain::Money::uah(value);
+            const std::size_t wholeEnd =
+                dot == std::string::npos ? text.size() : dot;
+
+            std::int64_t kopiykas = 0;
+            const std::int64_t maxValue =
+                (std::numeric_limits<std::int64_t>::max)();
+
+            for (std::size_t i = 0; i < wholeEnd; ++i) {
+                if (text[i] < '0' || text[i] > '9') {
+                    throw std::invalid_argument("Invalid amount");
+                }
+
+                const int digit = text[i] - '0';
+
+                if (kopiykas > (maxValue - digit) / 10) {
+                    throw std::out_of_range("Amount too large");
+                }
+
+                kopiykas = kopiykas * 10 + digit;
+            }
+
+            if (kopiykas > maxValue / 100) {
+                throw std::out_of_range("Amount too large");
+            }
+
+            kopiykas *= 100;
+
+            if (dot != std::string::npos) {
+                const int first = text[dot + 1] - '0';
+
+                if (first < 0 || first > 9) {
+                    throw std::invalid_argument("Invalid amount");
+                }
+
+                int fraction = first * 10;
+
+                if (dot + 2 < text.size()) {
+                    const int second = text[dot + 2] - '0';
+
+                    if (second < 0 || second > 9) {
+                        throw std::invalid_argument("Invalid amount");
+                    }
+
+                    fraction += second;
+                }
+
+                if (kopiykas > maxValue - fraction) {
+                    throw std::out_of_range("Amount too large");
+                }
+
+                kopiykas += fraction;
+            }
+
+            if (kopiykas == 0) {
+                throw std::invalid_argument("Invalid amount");
+            }
+
+            amount = domain::Money::ofKopiykas(kopiykas);
         }
         catch (const std::invalid_argument&) {
             ctx.ui.showError("Invalid transfer amount.");
@@ -79,6 +141,7 @@ namespace atm::presentation {
 
             throw;
         }
+
 
         application::TransferPreview preview;
 

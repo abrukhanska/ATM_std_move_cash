@@ -35,6 +35,8 @@
 #include "presentation/idle_state.hpp"
 #include "presentation/receipt_printer.hpp"
 #include "presentation/support_channel.hpp"
+#include "presentation/atm_machine.hpp"
+
 
 #include <chrono>
 
@@ -213,16 +215,12 @@ int main()
         };
 
         // 10. State machine
-        std::unique_ptr<presentation::AtmState> state =
-            std::make_unique<presentation::IdleState>();
+        presentation::AtmMachine machine(
+            ctx,
+            std::make_unique<presentation::IdleState>()
+        );
 
-        while (!ctx.exitRequested) {
-            if (!state) {
-                state = std::make_unique<presentation::IdleState>();
-            }
-
-            state = state->handle(ctx);
-        }
+        machine.run();
 
         return 0;
     }

@@ -12,6 +12,8 @@
 #include "domain/domain_error.hpp"
 #include "domain/money.hpp"
 
+#include <cstdint>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -76,12 +78,19 @@ namespace atm::presentation {
         const domain::Payee& selectedPayee =
             payees[*payeeChoice.index];
 
-        const Reply requisiteInput = ctx.ui.prompt(
-            "Enter payment requisite:"
-        );
+        // Charity does not require a payment requisite.
+        std::string requisite;
 
-        if (requisiteInput.nav != Nav::Ok) {
-            return requisiteInput.nav;
+        if (category == domain::PayeeCategory::MobileOperator) {
+            const Reply requisiteInput = ctx.ui.prompt(
+                "Enter phone number (10 digits):"
+            );
+
+            if (requisiteInput.nav != Nav::Ok) {
+                return requisiteInput.nav;
+            }
+
+            requisite = requisiteInput.text;
         }
 
         const Reply amountInput = ctx.ui.prompt(
@@ -95,15 +104,78 @@ namespace atm::presentation {
         domain::Money amount;
 
         try {
-            std::size_t pos = 0;
-            const long long value = std::stoll(amountInput.text, &pos);
+            const std::string& text = amountInput.text;
+            const std::size_t dot = text.find_first_of(".,");
 
-            if (pos != amountInput.text.size() || value <= 0) {
-                ctx.ui.showError("Invalid payment amount.");
-                return Nav::Cancel;
+            if (text.empty() ||
+                (dot != std::string::npos &&
+                    (dot == 0 ||
+                        dot == text.size() - 1 ||
+                        text.find_first_of(".,", dot + 1) != std::string::npos ||
+                        text.size() - dot - 1 > 2))) {
+                throw std::invalid_argument("Invalid amount");
             }
 
-            amount = domain::Money::uah(value);
+            const std::size_t wholeEnd =
+                dot == std::string::npos ? text.size() : dot;
+
+            std::int64_t kopiykas = 0;
+            const std::int64_t maxValue =
+                (std::numeric_limits<std::int64_t>::max)();
+
+            // Parse whole hryvnias without floating-point arithmetic.
+            for (std::size_t i = 0; i < wholeEnd; ++i) {
+                if (text[i] < '0' || text[i] > '9') {
+                    throw std::invalid_argument("Invalid amount");
+                }
+
+                const int digit = text[i] - '0';
+
+                if (kopiykas > (maxValue - digit) / 10) {
+                    throw std::out_of_range("Amount too large");
+                }
+
+                kopiykas = kopiykas * 10 + digit;
+            }
+
+            if (kopiykas > maxValue / 100) {
+                throw std::out_of_range("Amount too large");
+            }
+
+            kopiykas *= 100;
+
+            // Parse optional fractional part (one or two digits).
+            if (dot != std::string::npos) {
+                const int first = text[dot + 1] - '0';
+
+                if (first < 0 || first > 9) {
+                    throw std::invalid_argument("Invalid amount");
+                }
+
+                int fraction = first * 10;
+
+                if (dot + 2 < text.size()) {
+                    const int second = text[dot + 2] - '0';
+
+                    if (second < 0 || second > 9) {
+                        throw std::invalid_argument("Invalid amount");
+                    }
+
+                    fraction += second;
+                }
+
+                if (kopiykas > maxValue - fraction) {
+                    throw std::out_of_range("Amount too large");
+                }
+
+                kopiykas += fraction;
+            }
+
+            if (kopiykas == 0) {
+                throw std::invalid_argument("Invalid amount");
+            }
+
+            amount = domain::Money::ofKopiykas(kopiykas);
         }
         catch (const std::invalid_argument&) {
             ctx.ui.showError("Invalid payment amount.");
@@ -125,7 +197,7 @@ namespace atm::presentation {
 
         ctx.ui.showScreen("Payment details", {
             "Payee: " + selectedPayee.name,
-            "Requisite: " + requisiteInput.text,
+            "Requisite: " + (requisite.empty() ? "Not required" : requisite),
             "Amount: " + amount.format()
             });
 
@@ -139,13 +211,12 @@ namespace atm::presentation {
 
         domain::JournalEntry entry;
 
-
         try {
             entry = ctx.payment.pay(
                 session.card,
                 *session.account,
                 selectedPayee.id,
-                requisiteInput.text,
+                requisite,
                 amount
             );
         }

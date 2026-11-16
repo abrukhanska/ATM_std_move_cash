@@ -3,6 +3,9 @@
 #include "domain/enums.hpp"
 
 #include <string>
+#include <ctime>
+#include <iomanip>
+#include <sstream>
 
 namespace atm::presentation {
 
@@ -68,9 +71,49 @@ namespace atm::presentation {
 
         printField(out_, "Transaction ID: ", std::to_string(entry.id));
         printField(out_, "Date: ", entry.localDay);
+        const std::time_t timestamp = static_cast<std::time_t>(entry.atUtc);
+        const std::tm* utc = std::gmtime(&timestamp);
+
+        if (utc != nullptr) {
+            std::ostringstream timeStream;
+            timeStream << std::put_time(utc, "%H:%M:%S");
+            printField(out_, "Time (UTC): ", timeStream.str());
+        }
+
         printField(out_, "Operation: ", std::string(atm::domain::toString(entry.kind)));
         printField(out_, "Card: ", entry.actor.masked());
         printField(out_, "Amount: ", entry.amount.format() + " UAH", GREEN);
+
+        if (entry.kind == domain::EntryKind::Withdrawal ||
+            entry.kind == domain::EntryKind::Deposit ||
+            entry.kind == domain::EntryKind::CashLoaded ||
+            entry.kind == domain::EntryKind::CashUnloaded) {
+
+            bool first = true;
+
+            for (const auto denomination : domain::kAllDenominations) {
+                const auto count = entry.cash.count(denomination);
+
+                if (count > 0) {
+                    const std::string banknotes =
+                        std::to_string(domain::denominationUah(denomination))
+                        + " UAH x " + std::to_string(count);
+
+                    printField(
+                        out_,
+                        first ? "Banknotes: " : "           ",
+                        banknotes,
+                        WHITE
+                    );
+
+                    first = false;
+                }
+            }
+        }
+
+
+
+
 
         if (entry.account.has_value()) {
             printField(out_, "Account ID: ", std::to_string(*entry.account));

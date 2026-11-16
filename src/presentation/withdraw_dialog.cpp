@@ -8,11 +8,15 @@
 #include "application/withdrawal_service.hpp"
 #include "domain/domain_error.hpp"
 #include "domain/money.hpp"
+#include "domain/enums.hpp"
 
 #include <optional>
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <cstdint>
+#include <limits>
+
 
 namespace atm::presentation {
 
@@ -59,19 +63,84 @@ namespace atm::presentation {
                 return input.nav;
             }
 
-            try {
-                std::size_t pos = 0;
-                const long long value = std::stoll(input.text, &pos);
 
-                if (pos != input.text.size() ||
-                    value <= 0 ||
-                    value % 100 != 0) {
-                    ctx.ui.showError("Amount must be positive and a multiple of 100 UAH.");
+            try {
+                const std::string& text = input.text;
+                const std::size_t separator = text.find_first_of(".,");
+
+                if (text.empty() ||
+                    (separator != std::string::npos &&
+                        (separator == 0 ||
+                            separator == text.size() - 1 ||
+                            text.find_first_of(".,", separator + 1) != std::string::npos ||
+                            text.size() - separator - 1 > 2))) {
+                    throw std::invalid_argument("Invalid amount");
+                }
+
+                const std::size_t wholeEnd =
+                    separator == std::string::npos ? text.size() : separator;
+
+                constexpr std::int64_t maxValue =
+                    (std::numeric_limits<std::int64_t>::max)();
+
+                std::int64_t hryvnias = 0;
+
+                for (std::size_t i = 0; i < wholeEnd; ++i) {
+                    if (text[i] < '0' || text[i] > '9') {
+                        throw std::invalid_argument("Invalid amount");
+                    }
+
+                    const int digit = text[i] - '0';
+
+
+                    if (hryvnias > (maxValue / 1000) ||
+                        (hryvnias == maxValue / 1000 &&
+                            digit > (maxValue / 100) % 10)) 
+                    {
+                        throw std::out_of_range("Amount too large");
+                    }
+
+                    hryvnias = hryvnias * 10 + digit;
+                }
+
+                std::int64_t kopiykas = hryvnias * 100;
+
+                if (separator != std::string::npos) {
+                    const int first = text[separator + 1] - '0';
+
+                    if (first < 0 || first > 9) {
+                        throw std::invalid_argument("Invalid amount");
+                    }
+
+                    int fraction = first * 10;
+
+                    if (separator + 2 < text.size()) {
+                        const int second = text[separator + 2] - '0';
+
+                        if (second < 0 || second > 9) {
+                            throw std::invalid_argument("Invalid amount");
+                        }
+
+                        fraction += second;
+                    }
+
+                    if (kopiykas > maxValue - fraction) {
+                        throw std::out_of_range("Amount too large");
+                    }
+
+                    kopiykas += fraction;
+                }
+
+                if (kopiykas == 0 || kopiykas % 10'000 != 0) {
+                    ctx.ui.showError(
+                        "Amount must be positive and a multiple of 100 UAH."
+                    );
                     return Nav::Cancel;
                 }
 
-                amount = domain::Money::uah(value);
+                amount = domain::Money::ofKopiykas(kopiykas);
             }
+
             catch (const std::invalid_argument&) {
                 ctx.ui.showError("Invalid amount.");
                 return Nav::Cancel;
@@ -131,9 +200,27 @@ namespace atm::presentation {
             }
         }
 
-        ctx.ui.showScreen("Withdrawal successful", {
-            "Amount: " + amount.format()
-            });
+
+        std::vector<std::string> details{
+            "Amount: " + amount.format() + " UAH",
+            "Dispensed banknotes:"
+        };
+
+        if (entry.has_value()) {
+            for (const auto denomination : domain::kAllDenominations) {
+                const auto count = entry->cash.count(denomination);
+
+                if (count > 0) {
+                    details.push_back(
+                        std::to_string(domain::denominationUah(denomination))
+                        + " UAH x " + std::to_string(count)
+                    );
+                }
+            }
+        }
+
+        ctx.ui.showScreen("Withdrawal successful", details);
+
 
         const Nav receiptChoice = ctx.ui.confirm("Print receipt?");
 

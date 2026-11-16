@@ -12,12 +12,15 @@ namespace atm::presentation {
         }
     }
 
+
     void LoggingSupportChannel::send(std::string_view message) {
         log_ << message << '\n';
+        log_.flush();
 
         if (!log_) {
-            throw std::runtime_error("Failed to write support message.");
+            throw std::runtime_error("Failed to write or flush support message.");
         }
     }
+
 
 } // namespace atm::presentation
