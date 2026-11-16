@@ -19,6 +19,7 @@
 
 namespace atm::presentation {
 
+
     Nav depositDialog(AtmContext& ctx, Session& session)
     {
         if (!session.account.has_value()) {
@@ -34,65 +35,75 @@ namespace atm::presentation {
             "2000 UAH"
         };
 
-        const Reply choice = ctx.ui.choose(
-            "Select banknote denomination",
-            denominations
-        );
-
-        if (choice.nav != Nav::Ok) {
-            return choice.nav;
-        }
-
-        if (!choice.index.has_value() ||
-            *choice.index >= denominations.size()) {
-            ctx.ui.showError("Invalid denomination.");
-            return Nav::Cancel;
-        }
-
-        const Reply input = ctx.ui.prompt(
-            "Enter number of banknotes:"
-        );
-
-        if (input.nav != Nav::Ok) {
-            return input.nav;
-        }
-
-        std::uint32_t count = 0;
-
-        try {
-            std::size_t pos = 0;
-            const unsigned long long value = std::stoull(input.text, &pos);
-
-            if (pos != input.text.size() ||
-                value == 0 ||
-                value > std::numeric_limits<std::uint32_t>::max() ||
-                input.text.find('-') != std::string::npos) {
-                ctx.ui.showError("Invalid banknote count.");
-                return Nav::Cancel;
-            }
-
-            count = static_cast<std::uint32_t>(value);
-        }
-        catch (const std::invalid_argument&) {
-            ctx.ui.showError("Invalid banknote count.");
-            return Nav::Cancel;
-        }
-        catch (const std::out_of_range&) {
-            ctx.ui.showError("Banknote count is too large.");
-            return Nav::Cancel;
-        }
-
-        const domain::Denomination denomination =
-            domain::kAllDenominations[*choice.index];
-
         domain::BanknoteSet notes;
 
-        notes = notes.with(denomination, count);
+        for (std::size_t i = 0; i < denominations.size(); ++i) {
+            while (true) {
+                const Reply input = ctx.ui.prompt(
+                    "Number of " + denominations[i] +
+                    " banknotes (0 to skip):"
+                );
+
+                if (input.nav != Nav::Ok) {
+                    return input.nav;
+                }
+
+                if (input.text.empty() ||
+                    input.text.find_first_not_of("0123456789") != std::string::npos) {
+                    ctx.ui.showError("Invalid banknote count.");
+                    continue;
+                }
+
+                try {
+                    std::size_t pos = 0;
+                    const auto count = std::stoull(input.text, &pos);
+
+                    if (pos != input.text.size() ||
+                        count > std::numeric_limits<std::uint32_t>::max()) {
+                        ctx.ui.showError("Invalid banknote count.");
+                        continue;
+                    }
+
+                    notes = notes.with(
+                        domain::kAllDenominations[i],
+                        static_cast<std::uint32_t>(count)
+                    );
+
+                    break;
+                }
+                catch (const std::invalid_argument&) {
+                    ctx.ui.showError("Invalid banknote count.");
+                }
+                catch (const std::out_of_range&) {
+                    ctx.ui.showError("Banknote count is too large.");
+                }
+            }
+        }
 
         const domain::Money total = notes.total();
 
+        if (total == domain::Money::uah(0)) {
+            ctx.ui.showError("Deposit amount cannot be zero.");
+            return Nav::Cancel;
+        }
+
+        std::vector<std::string> lines;
+
+        for (std::size_t i = 0; i < denominations.size(); ++i) {
+            lines.push_back(
+                denominations[i] + ": " +
+                std::to_string(
+                    notes.count(domain::kAllDenominations[i])
+                )
+            );
+        }
+
+        lines.push_back("Total: " + total.format());
+
+        ctx.ui.showScreen("Deposit summary", lines);
+
         const Nav confirmation = ctx.ui.confirm(
-            "Deposit " + total.format() + "?"
+            "Confirm deposit?"
         );
 
         if (confirmation != Nav::Ok) {
@@ -134,5 +145,6 @@ namespace atm::presentation {
             ? Nav::Exit
             : Nav::Ok;
     }
+
 
 } // namespace atm::presentation
