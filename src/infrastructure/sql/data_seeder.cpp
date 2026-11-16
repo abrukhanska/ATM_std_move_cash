@@ -128,7 +128,7 @@ namespace atm::infrastructure::sql {
 		transaction.commit();
 	}
 
-    void infrastructure::sql::validateDatabase(Database &db)
+    void validateDatabase(Database &db)
     {
 		sqlite3* handle = db.handle();
         const auto max_uint32 = static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max());
