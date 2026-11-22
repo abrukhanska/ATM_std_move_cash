@@ -4,27 +4,56 @@
 #include "infrastructure/sql/stmt.hpp"
 
 #include <sqlite3.h>
+#include <limits>
 
 namespace atm::infrastructure::sql {
 
-	namespace {
+    namespace {
 
-		bool isEmpty(sqlite3* handle, const std::string& table) {
-			const std::string sql = "SELECT COUNT(*) FROM " + table + ";";
+        bool isEmpty(sqlite3* handle, const std::string& table) {
+            const std::string sql = "SELECT COUNT(*) FROM " + table + ";";
+            Stmt stmt = prepare(handle, sql.data(), "isEmpty prepare");
 
-			Stmt stmt = prepare(handle, sql.data(), "isEmpty prepare");
+            int rc = sqlite3_step(stmt.get());
+            if (rc != SQLITE_ROW) {
+                throw StorageError("isEmpty step", rc, sqlite3_errmsg(handle));
+            }
 
-			int rc = sqlite3_step(stmt.get());
-			if(rc != SQLITE_ROW) {
-				throw StorageError("isEmpty step", rc, sqlite3_errmsg(handle));
-			}
+            return sqlite3_column_int64(stmt.get(), 0) == 0;
+        }
 
-			return sqlite3_column_int64(stmt.get(), 0) == 0;
-		}
+        std::string extractString(sqlite3_stmt* stmt, int columnIndex, const char* context) {
+            if (sqlite3_column_type(stmt, columnIndex) != SQLITE_TEXT) {
+                throw StorageError(context, SQLITE_CORRUPT, "Expected TEXT value");
+            }
 
-	} // namespace
+            const auto* text_ptr = reinterpret_cast<const char*>(sqlite3_column_text(stmt, columnIndex));
+            const int text_length = sqlite3_column_bytes(stmt, columnIndex);
+            if (!text_ptr || text_length < 0) {
+                throw StorageError(context, SQLITE_CORRUPT, "Failed to read TEXT value");
+            }
 
-	void seedDemoDataIfEmpty(Database& db, const std::vector<domain::Card>& cards, const std::vector<domain::Account>& accounts) {
+            return std::string(text_ptr, static_cast<std::size_t>(text_length));
+        }
+
+        std::int64_t extractInt64(sqlite3_stmt* stmt, int columnIndex, const char* context) {
+            if (sqlite3_column_type(stmt, columnIndex) != SQLITE_INTEGER) {
+                throw StorageError(context, SQLITE_CORRUPT, "Expected INTEGER value");
+            }
+            return sqlite3_column_int64(stmt, columnIndex);
+        }
+
+        int extractInt(sqlite3_stmt* stmt, int columnIndex, const char* context) {
+            const std::int64_t value = extractInt64(stmt, columnIndex, context);
+            if (value < std::numeric_limits<int>::min() || value > std::numeric_limits<int>::max()) {
+                throw StorageError(context, SQLITE_RANGE, "INTEGER value out of int range");
+            }
+            return static_cast<int>(value);
+        }
+
+    } // namespace
+
+    void seedDemoDataIfEmpty(Database& db, const std::vector<domain::Card>& cards, const std::vector<domain::Account>& accounts) {
         sqlite3* handle = db.handle();
         if (!isEmpty(handle, "cards") || !isEmpty(handle, "accounts") || !isEmpty(handle, "banknotes") || !isEmpty(handle, "journal")) {
             return;
@@ -102,9 +131,8 @@ namespace atm::infrastructure::sql {
         transaction.commit();
     }
 
-    void validateDatabase(Database &db)
-    {
-		sqlite3* handle = db.handle();
+    void validateDatabase(Database& db) {
+        sqlite3* handle = db.handle();
         const auto max_uint32 = static_cast<std::int64_t>(std::numeric_limits<std::uint32_t>::max());
 
         {
@@ -116,8 +144,8 @@ namespace atm::infrastructure::sql {
             int rc = SQLITE_OK;
 
             while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
-                std::int64_t denomination = sqlite3_column_int64(stmt.get(), 0);
-                std::int64_t count = sqlite3_column_int64(stmt.get(), 1);
+                const std::int64_t denomination = extractInt64(stmt.get(), 0, "validateDatabase banknotes denomination");
+                const std::int64_t count = extractInt64(stmt.get(), 1, "validateDatabase banknotes count");
 
                 if (count < 0 || count > max_uint32) {
                     throw StorageError("validateDatabase banknotes", SQLITE_RANGE, "Banknote count out of uint32_t range");
@@ -134,7 +162,9 @@ namespace atm::infrastructure::sql {
                         break;
                     }
                 }
-                if (!matched) throw StorageError("validateDatabase banknotes", SQLITE_CORRUPT, "Unknown banknote denomination");
+                if (!matched) {
+                    throw StorageError("validateDatabase banknotes", SQLITE_CORRUPT, "Unknown banknote denomination");
+                }
                 ++row_count;
             }
 
@@ -148,7 +178,9 @@ namespace atm::infrastructure::sql {
 
         {
             const char* sql = R"(
-                SELECT c.card_number, c.kind, c.status, c.failed_attempts, COUNT(a.account_id) AS total_accounts, COALESCE(SUM(CASE WHEN a.is_primary = 1 THEN 1 ELSE 0 END), 0) AS primary_accounts
+                SELECT c.card_number, c.kind, c.status, c.failed_attempts,
+                       COUNT(a.account_id) AS total_accounts,
+                       COALESCE(SUM(CASE WHEN a.is_primary = 1 THEN 1 ELSE 0 END), 0) AS primary_accounts
                 FROM cards c
                 LEFT JOIN accounts a ON a.card_number = c.card_number
                 GROUP BY c.card_number;
@@ -160,30 +192,25 @@ namespace atm::infrastructure::sql {
             const std::string_view service = domain::toString(domain::CardKind::Service);
             const std::string_view active = domain::toString(domain::CardStatus::Active);
             const std::string_view retained = domain::toString(domain::CardStatus::Retained);
-            
+
             int rc = SQLITE_OK;
             while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
-                const auto* card_number_ptr = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), 0));
-                int card_number_length = sqlite3_column_bytes(stmt.get(), 0);
-                const auto* kind_ptr = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), 1));
-                const auto* status_ptr = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), 2));
-                int failed_attempts = sqlite3_column_int(stmt.get(), 3);
-                int total_accounts = sqlite3_column_int(stmt.get(), 4);
-                int primary_accounts = sqlite3_column_int(stmt.get(), 5);
+                const std::string card_number = extractString(stmt.get(), 0, "validateDatabase cards card_number");
+                const std::string kind = extractString(stmt.get(), 1, "validateDatabase cards kind");
+                const std::string status = extractString(stmt.get(), 2, "validateDatabase cards status");
+                const int failed_attempts = extractInt(stmt.get(), 3, "validateDatabase cards failed_attempts");
+                const int total_accounts = extractInt(stmt.get(), 4, "validateDatabase cards total_accounts");
+                const int primary_accounts = extractInt(stmt.get(), 5, "validateDatabase cards primary_accounts");
 
-                std::string_view card_number(card_number_ptr ? card_number_ptr : "", static_cast<std::size_t>(card_number_length));
                 try {
                     static_cast<void>(domain::CardNumber::parse(card_number));
                 } catch (const std::invalid_argument&) {
                     throw StorageError("validateDatabase cards", SQLITE_CORRUPT, "Invalid card number format");
                 }
 
-                std::string_view kind = kind_ptr ? kind_ptr : "";
-                std::string_view status = status_ptr ? status_ptr : "";
-
                 if (kind == client) {
-                    bool valid_active = (status == active && failed_attempts >= 0 && failed_attempts <= 2);
-                    bool valid_retained = (status == retained && failed_attempts == 3);
+                    const bool valid_active = (status == active && failed_attempts >= 0 && failed_attempts <= 2);
+                    const bool valid_retained = (status == retained && failed_attempts == 3);
                     if (!valid_active && !valid_retained) {
                         throw StorageError("validateDatabase cards", SQLITE_CORRUPT, "Inconsistent client card status or attempts");
                     }
@@ -215,15 +242,15 @@ namespace atm::infrastructure::sql {
             )";
 
             Stmt stmt = prepare(handle, sql, "validateDatabase accounts prepare");
-            
+
             int rc = SQLITE_OK;
             while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
-                std::int64_t id = sqlite3_column_int64(stmt.get(), 0);
-                std::int64_t balance = sqlite3_column_int64(stmt.get(), 1);
-                int is_primary = sqlite3_column_int(stmt.get(), 2);
-                bool owner = (sqlite3_column_type(stmt.get(), 3) != SQLITE_NULL);
+                const std::int64_t id = extractInt64(stmt.get(), 0, "validateDatabase accounts account_id");
+                const std::int64_t balance = extractInt64(stmt.get(), 1, "validateDatabase accounts balance_kop");
+                const int is_primary = extractInt(stmt.get(), 2, "validateDatabase accounts is_primary");
+                const bool has_owner = (sqlite3_column_type(stmt.get(), 3) != SQLITE_NULL);
 
-                if (id <= 0 || balance < 0 || (is_primary != 0 && is_primary != 1) || !owner) {
+                if (id <= 0 || balance < 0 || (is_primary != 0 && is_primary != 1) || !has_owner) {
                     throw StorageError("validateDatabase accounts", SQLITE_CORRUPT, "Invalid account record");
                 }
             }
@@ -245,52 +272,52 @@ namespace atm::infrastructure::sql {
 
             int rc = SQLITE_OK;
             while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
-                std::int64_t id = sqlite3_column_int64(stmt.get(), 0);
+                const std::int64_t id = extractInt64(stmt.get(), 0, "validateDatabase journal journal_id");
                 if (id <= 0) {
                     throw StorageError("validateDatabase journal", SQLITE_CORRUPT, "Invalid journal_id");
                 }
 
-                const auto* local_day_ptr = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), 2));
-                int local_day_length = sqlite3_column_bytes(stmt.get(), 2);
-                const auto* kind_ptr = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), 3));
-                int kind_length = sqlite3_column_bytes(stmt.get(), 3);
-                const auto* actor_ptr = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), 4));
-                int actor_length = sqlite3_column_bytes(stmt.get(), 4);
+                const std::int64_t at_utc = extractInt64(stmt.get(), 1, "validateDatabase journal at_utc");
+                const std::string local_day = extractString(stmt.get(), 2, "validateDatabase journal local_day");
+                const std::string kind = extractString(stmt.get(), 3, "validateDatabase journal kind");
+                const std::string actor_str = extractString(stmt.get(), 4, "validateDatabase journal actor_card");
 
-                auto optional_kind = domain::toEntryKind(
-                    std::string_view(kind_ptr ? kind_ptr : "", static_cast<std::size_t>(kind_length))
-                );
+                const auto optional_kind = domain::toEntryKind(kind);
                 if (!optional_kind.has_value()) {
-                    throw StorageError("validateDatabase journal", SQLITE_CORRUPT, "Unknown journal kind");
+                    throw StorageError("validateDatabase journal", SQLITE_CORRUPT, "Unknown journal kind: " + kind);
                 }
 
                 domain::JournalEntry entry;
                 entry.id = id;
-                entry.atUtc = sqlite3_column_int64(stmt.get(), 1);
-                entry.localDay = std::string(local_day_ptr ? local_day_ptr : "", static_cast<std::size_t>(local_day_length));
+                entry.atUtc = at_utc;
+                entry.localDay = local_day;
                 entry.kind = *optional_kind;
 
                 try {
-                    entry.actor = domain::CardNumber::parse(std::string_view(actor_ptr ? actor_ptr : "", static_cast<std::size_t>(actor_length)));
+                    entry.actor = domain::CardNumber::parse(actor_str);
                     if (sqlite3_column_type(stmt.get(), 5) != SQLITE_NULL) {
-                        entry.account = sqlite3_column_int64(stmt.get(), 5);
+                        entry.account = extractInt64(stmt.get(), 5, "validateDatabase journal account_id");
                     }
                     if (sqlite3_column_type(stmt.get(), 6) != SQLITE_NULL) {
-                        entry.target = sqlite3_column_int64(stmt.get(), 6);
+                        entry.target = extractInt64(stmt.get(), 6, "validateDatabase journal target_account_id");
                     }
                     if (sqlite3_column_type(stmt.get(), 7) != SQLITE_NULL) {
-                        const auto* subject_card_ptr = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), 7));
-                        int subject_card_length = sqlite3_column_bytes(stmt.get(), 7);
                         entry.subjectCard = domain::CardNumber::parse(
-                            std::string_view(subject_card_ptr ? subject_card_ptr : "", static_cast<std::size_t>(subject_card_length))
+                            extractString(stmt.get(), 7, "validateDatabase journal subject_card")
                         );
                     }
-                    entry.amount = domain::Money::ofKopiykas(sqlite3_column_int64(stmt.get(), 8));
+                    entry.amount = domain::Money::ofKopiykas(
+                        extractInt64(stmt.get(), 8, "validateDatabase journal amount_kop")
+                    );
 
-                    const std::array<domain::Denomination, domain::kDenominationCount> denominations = domain::kAllDenominations;
+                    const auto denominations = domain::kAllDenominations;
                     domain::BanknoteSet banknotes;
                     for (std::size_t i = 0; i < denominations.size(); ++i) {
-                        std::int64_t count = sqlite3_column_int64(stmt.get(), static_cast<int>(9 + i));
+                        const std::int64_t count = extractInt64(
+                            stmt.get(),
+                            static_cast<int>(9 + i),
+                            "validateDatabase journal cash"
+                        );
                         if (count < 0 || count > max_uint32) {
                             throw StorageError("validateDatabase journal", SQLITE_RANGE, "Banknote count out of range");
                         }
@@ -299,14 +326,10 @@ namespace atm::infrastructure::sql {
                     entry.cash = banknotes;
 
                     if (sqlite3_column_type(stmt.get(), 14) != SQLITE_NULL) {
-                        entry.payeeId = sqlite3_column_int64(stmt.get(), 14);
+                        entry.payeeId = extractInt64(stmt.get(), 14, "validateDatabase journal payee_id");
                     }
                     if (sqlite3_column_type(stmt.get(), 15) != SQLITE_NULL) {
-                        const auto* requisite_ptr = reinterpret_cast<const char*>(sqlite3_column_text(stmt.get(), 15));
-                        int requisite_length = sqlite3_column_bytes(stmt.get(), 15);
-                        if (requisite_ptr && requisite_length > 0) {
-                            entry.requisite.assign(requisite_ptr, static_cast<std::size_t>(requisite_length));
-                        }
+                        entry.requisite = extractString(stmt.get(), 15, "validateDatabase journal requisite");
                     }
                 } catch (const StorageError&) {
                     throw;
