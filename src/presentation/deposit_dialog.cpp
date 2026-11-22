@@ -112,7 +112,7 @@ namespace atm::presentation {
                 return Nav::Cancel;
 
             case domain::ErrorReason::Overflow:
-                ctx.ui.showError("Deposit failed: the amount is too large to process.");
+                ctx.ui.showError("Deposit failed: cash storage limit exceeded.");
                 return Nav::Cancel;
 
             default:
