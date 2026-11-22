@@ -262,4 +262,38 @@ namespace {
             ErrorReason::UnknownCard);
     }
 
+
+    TEST(WithdrawalServiceTest, X1RestoresStateAfterEachSaveFailure) {
+        for (const std::size_t saveIndex : {1U, 2U}) {
+            Fixture f;
+
+            const auto balanceBefore = f.balance(1);
+            const auto cashBefore = f.storage.cash().load();
+            const auto journalBefore = f.storage.journal().last(10);
+
+            f.storage.failAfterSave = saveIndex;
+
+            EXPECT_THROW(
+                (void)f.service.withdraw(f.client, 1, Money::uah(100)),
+                InjectedStorageFailure
+            );
+
+            EXPECT_EQ(f.balance(1), balanceBefore);
+            EXPECT_EQ(f.storage.cash().load(), cashBefore);
+            EXPECT_EQ(f.storage.journal().last(10), journalBefore);
+
+            EXPECT_EQ(f.storage.rollbacks, 1);
+            EXPECT_EQ(f.storage.commits, 0);
+
+            f.storage.failAfterSave.reset();
+
+            const auto recovered =
+                f.service.withdraw(f.client, 1, Money::uah(100));
+
+            EXPECT_EQ(recovered.id, 1);
+            EXPECT_EQ(f.storage.commits, 1);
+        }
+    }
+
+
 }  // namespace

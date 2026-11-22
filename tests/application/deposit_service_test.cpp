@@ -174,4 +174,42 @@ namespace {
         }
     }
 
+
+
+    TEST(DepositServiceTest, X1RestoresStateAfterEachSaveFailure) {
+        for (const std::size_t saveIndex : {1U, 2U}) {
+            Fixture f;
+
+            const auto notes =
+                BanknoteSet{}.with(Denomination::UAH200, 1);
+
+            const auto balanceBefore = f.balance(2);
+            const auto cashBefore = f.storage.cash().load();
+            const auto journalBefore = f.storage.journal().last(10);
+
+            f.storage.failAfterSave = saveIndex;
+
+            EXPECT_THROW(
+                (void)f.service.deposit(f.client, 2, notes),
+                InjectedStorageFailure
+            );
+
+            EXPECT_EQ(f.balance(2), balanceBefore);
+            EXPECT_EQ(f.storage.cash().load(), cashBefore);
+            EXPECT_EQ(f.storage.journal().last(10), journalBefore);
+
+            EXPECT_EQ(f.storage.rollbacks, 1);
+            EXPECT_EQ(f.storage.commits, 0);
+
+            f.storage.failAfterSave.reset();
+
+            const auto recovered =
+                f.service.deposit(f.client, 2, notes);
+
+            EXPECT_EQ(recovered.id, 1);
+            EXPECT_EQ(f.storage.commits, 1);
+        }
+    }
+
+
 }  // namespace

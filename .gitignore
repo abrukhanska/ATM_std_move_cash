@@ -12,3 +12,6 @@ CMakeUserPresets.json
 *.sqlite-journal
 *.log
 /build-tests/
+/build-fresh/
+/build-final/
+/build-check/

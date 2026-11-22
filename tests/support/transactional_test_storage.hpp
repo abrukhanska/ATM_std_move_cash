@@ -203,6 +203,12 @@ namespace atm::test_support {
         }
         domain::JournalEntry append(const domain::JournalEntry& entry) override {
             requireTransaction();
+            if (!domain::isValidJournalEntry(entry)) {
+                throw std::invalid_argument(
+                    "Inconsistent journal entry"
+                );
+            }
+
             auto saved = storeEntry(entry);
             if (failure == Failure::Append) {
                 throw InjectedStorageFailure("Injected append failure after write");
