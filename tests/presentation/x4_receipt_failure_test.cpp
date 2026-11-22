@@ -205,5 +205,162 @@ namespace {
     }
 
 
+
+    TEST(X4Receipt, DepositPrinterFailureAfterCommit) {
+        atm::test::TestAtmContext f;
+
+        const auto card = CardNumber::parse("0000000000000001");
+
+        f.storage.seed(Card(
+            card, "Test Client", "test-pin-hash", CardKind::Client
+        ));
+        f.storage.seed(Account(
+            1, card, Money::uah(5000), true
+        ));
+
+        Session session(card, CardKind::Client, 1);
+
+        // One 100 UAH banknote, other denominations skipped.
+        f.input.str("1\n0\n0\n0\n0\nyes\nyes\n");
+
+        FailingReceiptPrinter failingPrinter;
+
+        AtmContext ctx(
+            f.auth, f.accounts, f.withdrawal, f.deposit,
+            f.transfer, f.payment, f.cash, f.monitoring,
+            f.cardAdministration, f.device, f.ui,
+            failingPrinter, f.support, f.ctx.clock
+        );
+
+        const Nav result = depositDialog(ctx, session);
+
+        EXPECT_EQ(result, Nav::Exit);
+        EXPECT_EQ(failingPrinter.attempts, 1);
+        EXPECT_EQ(f.storage.commits, 1);
+
+        EXPECT_EQ(
+            f.storage.accounts().find(1)->balance(),
+            Money::uah(5100)
+        );
+
+        const auto journal = f.storage.journal().last(2);
+        EXPECT_EQ(journal.size(), std::size_t(1));
+
+        if (!journal.empty()) {
+            EXPECT_EQ(journal[0].kind, EntryKind::Deposit);
+            EXPECT_EQ(journal[0].amount, Money::uah(100));
+        }
+
+        EXPECT_FALSE(f.output.fail());
+    }
+
+    TEST(X4Receipt, TransferPrinterFailureAfterCommit) {
+        atm::test::TestAtmContext f;
+
+        const auto sender = CardNumber::parse("0000000000000001");
+        const auto recipient = CardNumber::parse("0000000000000002");
+
+        f.storage.seed(Card(
+            sender, "Sender", "test-pin-hash", CardKind::Client
+        ));
+        f.storage.seed(Card(
+            recipient, "Recipient", "test-pin-hash", CardKind::Client
+        ));
+
+        f.storage.seed(Account(
+            1, sender, Money::uah(5000), true
+        ));
+        f.storage.seed(Account(
+            2, recipient, Money::uah(1000), true
+        ));
+
+        Session session(sender, CardKind::Client, 1);
+
+        f.input.str(recipient.str() + "\n100\nyes\nyes\n");
+
+        FailingReceiptPrinter failingPrinter;
+
+        AtmContext ctx(
+            f.auth, f.accounts, f.withdrawal, f.deposit,
+            f.transfer, f.payment, f.cash, f.monitoring,
+            f.cardAdministration, f.device, f.ui,
+            failingPrinter, f.support, f.ctx.clock
+        );
+
+        const Nav result = transferDialog(ctx, session);
+
+        EXPECT_EQ(result, Nav::Exit);
+        EXPECT_EQ(failingPrinter.attempts, 1);
+        EXPECT_EQ(f.storage.commits, 1);
+
+        EXPECT_EQ(
+            f.storage.accounts().find(1)->balance(),
+            Money::uah(4900)
+        );
+        EXPECT_EQ(
+            f.storage.accounts().find(2)->balance(),
+            Money::uah(1100)
+        );
+
+        const auto journal = f.storage.journal().last(2);
+        EXPECT_EQ(journal.size(), std::size_t(1));
+
+        if (!journal.empty()) {
+            EXPECT_EQ(journal[0].kind, EntryKind::Transfer);
+            EXPECT_EQ(journal[0].amount, Money::uah(100));
+        }
+
+        EXPECT_FALSE(f.output.fail());
+    }
+
+    TEST(X4Receipt, PaymentPrinterFailureAfterCommit) {
+        atm::test::TestAtmContext f;
+
+        const auto card = CardNumber::parse("0000000000000001");
+
+        f.storage.seed(Card(
+            card, "Test Client", "test-pin-hash", CardKind::Client
+        ));
+        f.storage.seed(Account(
+            1, card, Money::uah(5000), true
+        ));
+
+        Session session(card, CardKind::Client, 1);
+
+        // Charity category, first payee, 100 UAH.
+        f.input.str("2\n1\n100\nyes\nyes\n");
+
+        FailingReceiptPrinter failingPrinter;
+
+        AtmContext ctx(
+            f.auth, f.accounts, f.withdrawal, f.deposit,
+            f.transfer, f.payment, f.cash, f.monitoring,
+            f.cardAdministration, f.device, f.ui,
+            failingPrinter, f.support, f.ctx.clock
+        );
+
+        const Nav result = paymentDialog(ctx, session);
+
+        EXPECT_EQ(result, Nav::Exit);
+        EXPECT_EQ(failingPrinter.attempts, 1);
+        EXPECT_EQ(f.storage.commits, 1);
+
+        EXPECT_EQ(
+            f.storage.accounts().find(1)->balance(),
+            Money::uah(4900)
+        );
+
+        const auto journal = f.storage.journal().last(2);
+        EXPECT_EQ(journal.size(), std::size_t(1));
+
+        if (!journal.empty()) {
+            EXPECT_EQ(journal[0].kind, EntryKind::Payment);
+            EXPECT_EQ(journal[0].amount, Money::uah(100));
+        }
+
+        EXPECT_FALSE(f.output.fail());
+    }
+
+
 } // namespace
 

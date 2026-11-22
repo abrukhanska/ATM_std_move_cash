@@ -1,6 +1,6 @@
-
 #include "presentation/console_ui.hpp"
 
+#include <algorithm>
 #include <cctype>
 #include <ios>
 #include <string>
@@ -26,42 +26,73 @@ namespace atm::presentation {
                 << "+" << RESET << '\n';
         }
 
-        void printLine(std::ostream& out, const std::string& text) {
-            out << PURPLE << "| " << RESET;
+        // Wrap long text while preserving the frame width and colors.
+        void printWrappedText(
+            std::ostream& out,
+            const std::string& text,
+            std::size_t highlightedLength,
+            const char* highlightedColor,
+            const char* remainingColor
+        ) {
+            constexpr std::size_t CONTENT_WIDTH = WIDTH - 2;
 
+            for (std::size_t start = 0; start < text.size() || start == 0;) {
+                const std::size_t length =
+                    std::min(CONTENT_WIDTH, text.size() - start);
+                const std::size_t end = start + length;
+
+                out << PURPLE << "| " << RESET;
+
+                if (start < highlightedLength) {
+                    const std::size_t coloredEnd =
+                        std::min(end, highlightedLength);
+
+                    out << highlightedColor
+                        << text.substr(start, coloredEnd - start)
+                        << RESET;
+
+                    if (coloredEnd < end) {
+                        out << remainingColor
+                            << text.substr(coloredEnd, end - coloredEnd)
+                            << RESET;
+                    }
+                }
+                else {
+                    out << remainingColor
+                        << text.substr(start, length)
+                        << RESET;
+                }
+
+                out << std::string(CONTENT_WIDTH - length, ' ');
+                out << PURPLE << " |" << RESET << '\n';
+
+                start = end;
+            }
+        }
+
+        void printLine(std::ostream& out, const std::string& text) {
             const std::size_t colon = text.find(':');
 
             if (colon != std::string::npos) {
                 const std::string label = text.substr(0, colon + 1);
-                const std::string value = text.substr(colon + 1);
 
                 if (label == "Recipient:" ||
                     label == "Card:" ||
                     label == "Amount:" ||
                     label == "Total:") {
 
-                    out << LAVENDER << label << RESET;
+                    const char* valueColor =
+                        (label == "Amount:" || label == "Total:")
+                        ? GREEN : WHITE;
 
-                    if (label == "Amount:" || label == "Total:") {
-                        out << GREEN << value << RESET;
-                    }
-                    else {
-                        out << WHITE << value << RESET;
-                    }
-                }
-                else {
-                    out << WHITE << text << RESET;
+                    printWrappedText(
+                        out, text, label.size(), LAVENDER, valueColor
+                    );
+                    return;
                 }
             }
-            else {
-                out << WHITE << text << RESET;
-            }
 
-            if (text.size() < WIDTH - 2) {
-                out << std::string(WIDTH - 2 - text.size(), ' ');
-            }
-
-            out << PURPLE << " |" << RESET << '\n';
+            printWrappedText(out, text, 0, WHITE, WHITE);
         }
 
         void printMenuItem(
@@ -72,32 +103,26 @@ namespace atm::presentation {
         ) {
             const std::string text = number + " " + title;
 
-            out << PURPLE << "| " << RESET;
-
-            if (isCancel) {
-                out << SOFT_RED << number << RESET
-                    << WHITE << " " << title << RESET;
-            }
-            else {
-                out << LAVENDER << number << RESET
-                    << WHITE << " " << title << RESET;
-            }
-
-            if (text.size() < WIDTH - 2) {
-                out << std::string(WIDTH - 2 - text.size(), ' ');
-            }
-
-            out << PURPLE << " |" << RESET << '\n';
+            printWrappedText(
+                out,
+                text,
+                number.size(),
+                isCancel ? SOFT_RED : LAVENDER,
+                WHITE
+            );
         }
 
         std::string trim(const std::string& text) {
-            const std::size_t first = text.find_first_not_of(" \t\r\n");
+            const std::size_t first =
+                text.find_first_not_of(" \t\r\n");
 
             if (first == std::string::npos) {
                 return "";
             }
 
-            const std::size_t last = text.find_last_not_of(" \t\r\n");
+            const std::size_t last =
+                text.find_last_not_of(" \t\r\n");
+
             return text.substr(first, last - first + 1);
         }
 
@@ -203,6 +228,7 @@ namespace atm::presentation {
     ) {
         while (true) {
             out_ << '\n';
+
             printBorder(out_);
             printLine(out_, title);
             printBorder(out_);
@@ -234,11 +260,13 @@ namespace atm::presentation {
 
             try {
                 std::size_t pos = 0;
-                const unsigned long selected = std::stoul(input, &pos);
+                const unsigned long selected =
+                    std::stoul(input, &pos);
 
                 if (pos == input.size()
                     && selected >= 1
                     && selected <= options.size()) {
+
                     return {
                         Nav::Ok,
                         "",
@@ -276,4 +304,3 @@ namespace atm::presentation {
     }
 
 } // namespace atm::presentation
-

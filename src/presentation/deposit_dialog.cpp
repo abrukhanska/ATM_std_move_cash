@@ -4,6 +4,7 @@
 #include "presentation/session.hpp"
 #include "presentation/user_interface.hpp"
 #include "presentation/receipt_printer.hpp"
+#include "presentation/input_parsing.hpp"
 
 #include "application/deposit_service.hpp"
 
@@ -16,6 +17,7 @@
 #include <stdexcept>
 #include <string>
 #include <vector>
+#include <ios>
 
 namespace atm::presentation {
 
@@ -37,47 +39,10 @@ namespace atm::presentation {
 
         domain::BanknoteSet notes;
 
-        for (std::size_t i = 0; i < denominations.size(); ++i) {
-            while (true) {
-                const Reply input = ctx.ui.prompt(
-                    "Number of " + denominations[i] +
-                    " banknotes (0 to skip):"
-                );
+        const Nav inputResult = readBanknotes(ctx, notes);
 
-                if (input.nav != Nav::Ok) {
-                    return input.nav;
-                }
-
-                if (input.text.empty() ||
-                    input.text.find_first_not_of("0123456789") != std::string::npos) {
-                    ctx.ui.showError("Invalid banknote count.");
-                    continue;
-                }
-
-                try {
-                    std::size_t pos = 0;
-                    const auto count = std::stoull(input.text, &pos);
-
-                    if (pos != input.text.size() ||
-                        count > std::numeric_limits<std::uint32_t>::max()) {
-                        ctx.ui.showError("Invalid banknote count.");
-                        continue;
-                    }
-
-                    notes = notes.with(
-                        domain::kAllDenominations[i],
-                        static_cast<std::uint32_t>(count)
-                    );
-
-                    break;
-                }
-                catch (const std::invalid_argument&) {
-                    ctx.ui.showError("Invalid banknote count.");
-                }
-                catch (const std::out_of_range&) {
-                    ctx.ui.showError("Banknote count is too large.");
-                }
-            }
+        if (inputResult != Nav::Ok) {
+            return inputResult;
         }
 
 
@@ -157,7 +122,20 @@ namespace atm::presentation {
         const Nav receiptChoice = ctx.ui.confirm("Print receipt?");
 
         if (receiptChoice == Nav::Ok) {
-            ctx.printer.print(entry);
+            try {
+                ctx.printer.print(entry);
+            }
+            catch (const std::ios_base::failure&) {
+                try {
+                    ctx.ui.showError(
+                        "Deposit completed, but receipt printing failed."
+                    );
+                }
+                catch (const std::ios_base::failure&) {
+                }
+
+                return Nav::Exit;
+            }
         }
 
         return receiptChoice == Nav::Exit

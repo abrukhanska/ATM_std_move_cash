@@ -74,11 +74,11 @@ namespace atm::presentation {
         printField(out_, "Date: ", entry.localDay);
         
         const std::time_t timestamp = static_cast<std::time_t>(entry.atUtc);
-        const std::tm* local = std::localtime(&timestamp);
+        std::tm local{};
 
-        if (local != nullptr) {
+        if (localtime_s(&local, &timestamp) == 0) {
             std::ostringstream timeStream;
-            timeStream << std::put_time(local, "%H:%M:%S");
+            timeStream << std::put_time(&local, "%H:%M:%S");
             printField(out_, "Time (local): ", timeStream.str());
         }
 

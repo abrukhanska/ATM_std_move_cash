@@ -37,7 +37,11 @@ namespace atm::presentation {
             }
 
             if (reply.nav == Nav::Cancel) {
-                continue;
+                if (ctx.device.isInService()) {
+                    return std::make_unique<IdleState>();
+                }
+
+                return std::make_unique<OutOfServiceState>();
             }
 
             if (!reply.index.has_value() ||

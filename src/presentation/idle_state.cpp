@@ -3,6 +3,8 @@
 #include "presentation/atm_context.hpp"
 #include "presentation/dialogs.hpp"
 #include "presentation/user_interface.hpp"
+#include "presentation/input_parsing.hpp"
+
 #include "application/auth_service.hpp"
 #include "domain/card_number.hpp"
 #include "domain/enums.hpp"
@@ -31,7 +33,7 @@ namespace atm::presentation {
         domain::CardNumber card;
 
         try {
-            card = domain::CardNumber::parse(reply.text);
+            card = parseCardNumber(reply.text);
         }
         catch (const std::invalid_argument&) {
             ctx.ui.showError("Invalid card number. Please enter 16 digits.");

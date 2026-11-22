@@ -2,6 +2,8 @@
 #include "presentation/session.hpp"
 #include "presentation/user_interface.hpp"
 #include "presentation/receipt_printer.hpp"
+#include "presentation/input_parsing.hpp"
+
 #include "application/cash_service.hpp"
 #include "domain/banknote_set.hpp"
 #include "domain/domain_error.hpp"
@@ -40,54 +42,6 @@ namespace atm::presentation {
             return lines;
         }
 
-
-        Nav readBanknotes(AtmContext& ctx, domain::BanknoteSet& notes)
-        {
-            for (std::size_t i = 0; i < denominations.size(); ++i) {
-                while (true) {
-                    const Reply input = ctx.ui.prompt(
-                        "Number of " + denominations[i] +
-                        " banknotes (0 to skip):"
-                    );
-
-                    if (input.nav != Nav::Ok) {
-                        return input.nav;
-                    }
-
-                    if (input.text.empty() ||
-                        input.text.find_first_not_of("0123456789") != std::string::npos) {
-                        ctx.ui.showError("Invalid banknote count.");
-                        continue;
-                    }
-
-                    try {
-                        std::size_t pos = 0;
-                        const auto count = std::stoull(input.text, &pos);
-
-                        if (pos != input.text.size() ||
-                            count > std::numeric_limits<std::uint32_t>::max()) {
-                            ctx.ui.showError("Invalid banknote count.");
-                            continue;
-                        }
-
-                        notes = notes.with(
-                            domain::kAllDenominations[i],
-                            static_cast<std::uint32_t>(count)
-                        );
-
-                        break;
-                    }
-                    catch (const std::invalid_argument&) {
-                        ctx.ui.showError("Invalid banknote count.");
-                    }
-                    catch (const std::out_of_range&) {
-                        ctx.ui.showError("Banknote count is too large.");
-                    }
-                }
-            }
-
-            return Nav::Ok;
-        }
 
 
         Nav changeCash(AtmContext& ctx, Session& session, bool loading)

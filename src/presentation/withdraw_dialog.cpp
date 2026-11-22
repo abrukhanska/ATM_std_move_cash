@@ -4,6 +4,7 @@
 #include "presentation/session.hpp"
 #include "presentation/user_interface.hpp"
 #include "presentation/receipt_printer.hpp"
+#include "presentation/input_parsing.hpp"
 
 #include "application/withdrawal_service.hpp"
 #include "domain/domain_error.hpp"
@@ -65,80 +66,14 @@ namespace atm::presentation {
 
 
             try {
-                const std::string& text = input.text;
-                const std::size_t separator = text.find_first_of(".,");
+                amount = parseMoney(input.text);
 
-                if (text.empty() ||
-                    (separator != std::string::npos &&
-                        (separator == 0 ||
-                            separator == text.size() - 1 ||
-                            text.find_first_of(".,", separator + 1) != std::string::npos ||
-                            text.size() - separator - 1 > 2))) {
-                    throw std::invalid_argument("Invalid amount");
-                }
-
-                const std::size_t wholeEnd =
-                    separator == std::string::npos ? text.size() : separator;
-
-                constexpr std::int64_t maxValue =
-                    (std::numeric_limits<std::int64_t>::max)();
-
-                std::int64_t hryvnias = 0;
-
-                for (std::size_t i = 0; i < wholeEnd; ++i) {
-                    if (text[i] < '0' || text[i] > '9') {
-                        throw std::invalid_argument("Invalid amount");
-                    }
-
-                    const int digit = text[i] - '0';
-
-
-                    if (hryvnias > (maxValue / 1000) ||
-                        (hryvnias == maxValue / 1000 &&
-                            digit > (maxValue / 100) % 10)) 
-                    {
-                        throw std::out_of_range("Amount too large");
-                    }
-
-                    hryvnias = hryvnias * 10 + digit;
-                }
-
-                std::int64_t kopiykas = hryvnias * 100;
-
-                if (separator != std::string::npos) {
-                    const int first = text[separator + 1] - '0';
-
-                    if (first < 0 || first > 9) {
-                        throw std::invalid_argument("Invalid amount");
-                    }
-
-                    int fraction = first * 10;
-
-                    if (separator + 2 < text.size()) {
-                        const int second = text[separator + 2] - '0';
-
-                        if (second < 0 || second > 9) {
-                            throw std::invalid_argument("Invalid amount");
-                        }
-
-                        fraction += second;
-                    }
-
-                    if (kopiykas > maxValue - fraction) {
-                        throw std::out_of_range("Amount too large");
-                    }
-
-                    kopiykas += fraction;
-                }
-
-                if (kopiykas == 0 || kopiykas % 10'000 != 0) {
+                if (amount.kopiykas() % 10'000 != 0) {
                     ctx.ui.showError(
                         "Amount must be positive and a multiple of 100 UAH."
                     );
                     return Nav::Cancel;
                 }
-
-                amount = domain::Money::ofKopiykas(kopiykas);
             }
 
             catch (const std::invalid_argument&) {

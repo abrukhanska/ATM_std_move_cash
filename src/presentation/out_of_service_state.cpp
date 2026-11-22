@@ -3,12 +3,16 @@
 #include "presentation/atm_context.hpp"
 #include "presentation/dialogs.hpp"
 #include "presentation/user_interface.hpp"
+#include "presentation/input_parsing.hpp"
+
 #include "application/auth_service.hpp"
 #include "application/device_service.hpp"
 #include "domain/card_number.hpp"
 #include "domain/enums.hpp"
 
 #include <memory>
+#include <stdexcept>
+#include <string_view>
 
 namespace atm::presentation {
 
@@ -21,7 +25,7 @@ namespace atm::presentation {
 
         ctx.ui.showScreen(
             "Out of service",
-            { "ATM is unavailable for clients. Service access only." }
+            { "ATM unavailable for clients.", "Service access only." }
         );
 
         const Reply reply = ctx.ui.prompt("Enter service card number:");
@@ -35,8 +39,16 @@ namespace atm::presentation {
             return nullptr;
         }
 
-        const domain::CardNumber card =
-            domain::CardNumber::parse(reply.text);
+        domain::CardNumber card;
+
+        try {
+            card = parseCardNumber(reply.text);
+        }
+
+        catch (const std::invalid_argument&) {
+            ctx.ui.showError("Invalid card number.");
+            return nullptr;
+        }
 
         const application::CardInspection inspection =
             ctx.auth.inspect(card);
@@ -50,3 +62,4 @@ namespace atm::presentation {
     }
 
 } // namespace atm::presentation
+

@@ -24,13 +24,14 @@ namespace atm::presentation {
         }
     }
 
+
     void AtmMachine::step()
     {
         if (ctx_.exitRequested) {
             return;
         }
 
-        if (ctx_.device.isBroken()) {
+        const auto handleBroken = [this]() {
             state_.reset();
             ctx_.exitRequested = true;
 
@@ -45,7 +46,10 @@ namespace atm::presentation {
                 catch (const std::exception&) {
                 }
             }
+            };
 
+        if (ctx_.device.isBroken()) {
+            handleBroken();
             return;
         }
 
@@ -57,22 +61,10 @@ namespace atm::presentation {
         }
 
         if (ctx_.device.isBroken()) {
-            state_.reset();
-            ctx_.exitRequested = true;
-
-            if (!supportAttempted_) {
-                supportAttempted_ = true;
-
-                try {
-                    ctx_.support.send(
-                        "ATM storage failure. Service required."
-                    );
-                }
-                catch (const std::exception&) {
-                }
-            }
+            handleBroken();
         }
     }
+
 
     void AtmMachine::run()
     {

@@ -10,6 +10,7 @@
 #include "presentation/out_of_service_state.hpp"
 #include "presentation/session.hpp"
 #include "presentation/ui_types.hpp"
+#include "presentation/input_parsing.hpp"
 
 #include "domain/card.hpp"
 #include "domain/account.hpp"
@@ -198,6 +199,29 @@ namespace {
         );
     }
 
+
+    TEST(ServiceState, ZeroReturnsToIdleWhenInService) {
+        atm::test::TestAtmContext f;
+        seedService(f);
+
+        f.input.str("0\n");
+
+        ServiceState state(
+            Session(serviceCard, CardKind::Service)
+        );
+
+        auto next = state.handle(f.ctx);
+
+        EXPECT_TRUE(next != nullptr);
+        EXPECT_TRUE(
+            dynamic_cast<IdleState*>(next.get()) != nullptr
+        );
+
+        EXPECT_EQ(f.storage.commits, 0);
+    }
+
+
+
     TEST(OutOfServiceState, EofRequestsExit) {
         atm::test::TestAtmContext f;
 
@@ -224,5 +248,272 @@ namespace {
         );
         EXPECT_EQ(f.storage.commits, 0);
     }
+
+
+
+    TEST(OutOfServiceState, InvalidCardShowsErrorAndAllowsRetry) {
+        atm::test::TestAtmContext f;
+        seedService(f);
+
+        f.input.str("invalid-card\n");
+
+        OutOfServiceState state;
+        auto next = state.handle(f.ctx);
+
+        EXPECT_TRUE(next == nullptr);
+        EXPECT_FALSE(f.ctx.exitRequested);
+
+        const std::string output = f.output.str();
+
+        EXPECT_NE(
+            output.find("Invalid card number."),
+            std::string::npos
+        );
+
+        EXPECT_EQ(f.storage.commits, 0);
+    }
+
+
+    TEST(InputParsing, ParseMoneyAcceptsValidAmounts) {
+        using atm::presentation::parseMoney;
+
+        EXPECT_EQ(parseMoney("100").kopiykas(), 10000);
+        EXPECT_EQ(parseMoney("12.50").kopiykas(), 1250);
+        EXPECT_EQ(parseMoney("12,50").kopiykas(), 1250);
+        EXPECT_EQ(parseMoney("  25.5  ").kopiykas(), 2550);
+        EXPECT_EQ(parseMoney("0.01").kopiykas(), 1);
+    }
+
+
+
+    TEST(InputParsing, ParseMoneyRejectsInvalidAmounts) {
+        using atm::presentation::parseMoney;
+
+        const std::string invalid[] = {
+            "",
+            "   ",
+            "0",
+            "0.00",
+            "-10",
+            "+10",
+            "abc",
+            "12abc",
+            ".50",
+            "12.",
+            "12.345",
+            "12,3.4",
+            "1 000"
+        };
+
+        for (const auto& input : invalid) {
+            bool rejected = false;
+
+            try {
+                (void)parseMoney(input);
+            }
+            catch (const std::invalid_argument&) {
+                rejected = true;
+            }
+
+            EXPECT_TRUE(rejected);
+        }
+
+        bool overflowRejected = false;
+
+        try {
+            (void)parseMoney("999999999999999999999999");
+        }
+        catch (const std::out_of_range&) {
+            overflowRejected = true;
+        }
+
+        EXPECT_TRUE(overflowRejected);
+    }
+
+
+
+    TEST(InputParsing, ParseCardNumberAcceptsValidInput) {
+        using atm::presentation::parseCardNumber;
+
+        const auto expected =
+            CardNumber::parse("4000000000000001");
+
+        EXPECT_TRUE(
+            parseCardNumber("4000000000000001") == expected
+        );
+
+        EXPECT_TRUE(
+            parseCardNumber("  4000000000000001  ") == expected
+        );
+
+        EXPECT_TRUE(
+            parseCardNumber("\t4000000000000001\n") == expected
+        );
+    }
+
+
+    TEST(InputParsing, ParseCardNumberRejectsInvalidInput) {
+        using atm::presentation::parseCardNumber;
+
+        const std::string invalid[] = {
+            "",
+            "   ",
+            "\t\n",
+            "1234",
+            "400000000000000",
+            "40000000000000012",
+            "abcdefghijklmnop",
+            "40000000abcd0001",
+            "4000 0000 0000 0001",
+            "-4000000000000001"
+        };
+
+        for (const auto& input : invalid) {
+            bool rejected = false;
+
+            try {
+                (void)parseCardNumber(input);
+            }
+            catch (const std::invalid_argument&) {
+                rejected = true;
+            }
+
+            EXPECT_TRUE(rejected);
+        }
+    }
+
+
+    TEST(InputParsing, ReadBanknotesAcceptsValidCounts) {
+        atm::test::TestAtmContext f;
+        BanknoteSet notes;
+
+        f.input.str("1\n2\n3\n4\n5\n");
+
+        const Nav result = readBanknotes(f.ctx, notes);
+
+        EXPECT_TRUE(result == Nav::Ok);
+
+        for (std::size_t i = 0; i < kAllDenominations.size(); ++i) {
+            EXPECT_EQ(
+                notes.count(kAllDenominations[i]),
+                static_cast<std::uint32_t>(i + 1)
+            );
+        }
+
+        EXPECT_EQ(f.storage.commits, 0);
+    }
+
+    TEST(InputParsing, ReadBanknotesAcceptsZeroCounts) {
+        atm::test::TestAtmContext f;
+        BanknoteSet notes;
+
+        f.input.str("0\n0\n0\n0\n0\n");
+
+        const Nav result = readBanknotes(f.ctx, notes);
+
+        EXPECT_TRUE(result == Nav::Ok);
+
+        for (const auto denomination : kAllDenominations) {
+            EXPECT_EQ(notes.count(denomination), 0);
+        }
+
+        EXPECT_EQ(f.storage.commits, 0);
+    }
+
+    TEST(InputParsing, ReadBanknotesRetriesInvalidInput) {
+        atm::test::TestAtmContext f;
+        BanknoteSet notes;
+
+        // Three invalid attempts, then five valid counts.
+        f.input.str(
+            "abc\n"
+            "-1\n"
+            "1.5\n"
+            "2\n"
+            "0\n"
+            "0\n"
+            "0\n"
+            "0\n"
+        );
+
+        const Nav result = readBanknotes(f.ctx, notes);
+
+        EXPECT_TRUE(result == Nav::Ok);
+
+        EXPECT_EQ(
+            notes.count(kAllDenominations[0]),
+            2
+        );
+
+        for (std::size_t i = 1; i < kAllDenominations.size(); ++i) {
+            EXPECT_EQ(notes.count(kAllDenominations[i]), 0);
+        }
+
+        EXPECT_NE(
+            f.output.str().find("Invalid banknote count."),
+            std::string::npos
+        );
+
+        EXPECT_EQ(f.storage.commits, 0);
+    }
+
+    TEST(InputParsing, ReadBanknotesRejectsOverflowAndRetries) {
+        atm::test::TestAtmContext f;
+        BanknoteSet notes;
+
+        f.input.str(
+            "4294967296\n"
+            "999999999999999999999999999999\n"
+            "3\n"
+            "0\n"
+            "0\n"
+            "0\n"
+            "0\n"
+        );
+
+        const Nav result = readBanknotes(f.ctx, notes);
+
+        EXPECT_TRUE(result == Nav::Ok);
+
+        EXPECT_EQ(
+            notes.count(kAllDenominations[0]),
+            3
+        );
+
+        EXPECT_NE(
+            f.output.str().find("Invalid banknote count."),
+            std::string::npos
+        );
+
+        EXPECT_NE(
+            f.output.str().find("Banknote count is too large."),
+            std::string::npos
+        );
+
+        EXPECT_EQ(f.storage.commits, 0);
+    }
+
+    TEST(InputParsing, ReadBanknotesCancelPreservesEnteredCounts) {
+        atm::test::TestAtmContext f;
+        BanknoteSet notes;
+
+        f.input.str("2\ncancel\n");
+
+        const Nav result = readBanknotes(f.ctx, notes);
+
+        EXPECT_TRUE(result == Nav::Cancel);
+
+        EXPECT_EQ(
+            notes.count(kAllDenominations[0]),
+            2
+        );
+
+        for (std::size_t i = 1; i < kAllDenominations.size(); ++i) {
+            EXPECT_EQ(notes.count(kAllDenominations[i]), 0);
+        }
+
+        EXPECT_EQ(f.storage.commits, 0);
+    }
+
 
 } // namespace
