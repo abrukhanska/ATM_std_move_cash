@@ -37,33 +37,39 @@ namespace atm::presentation {
             "2000 UAH"
         };
 
+
         domain::BanknoteSet notes;
-
-        const Nav inputResult = readBanknotes(ctx, notes);
-
-        if (inputResult != Nav::Ok) {
-            return inputResult;
-        }
-
-
         domain::Money total;
 
-        try {
-            total = notes.total();
-        }
-        catch (const domain::DomainError& e) {
-            if (e.reason() == domain::ErrorReason::Overflow) {
-                ctx.ui.showError("Deposit amount is too large.");
-                return Nav::Cancel;
+        while (true) {
+            notes = domain::BanknoteSet{};
+
+            const Nav inputResult = readBanknotes(ctx, notes);
+
+            if (inputResult != Nav::Ok) {
+                return inputResult;
             }
 
-            throw;
+            try {
+                total = notes.total();
+            }
+            catch (const domain::DomainError& e) {
+                if (e.reason() == domain::ErrorReason::Overflow) {
+                    ctx.ui.showError("Deposit amount is too large.");
+                    continue;
+                }
+
+                throw;
+            }
+
+            if (total == domain::Money::uah(0)) {
+                ctx.ui.showError("Deposit amount cannot be zero.");
+                continue;
+            }
+
+            break;
         }
 
-        if (total == domain::Money::uah(0)) {
-            ctx.ui.showError("Deposit amount cannot be zero.");
-            return Nav::Cancel;
-        }
 
 
         std::vector<std::string> lines;

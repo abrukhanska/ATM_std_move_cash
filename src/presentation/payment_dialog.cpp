@@ -83,55 +83,60 @@ namespace atm::presentation {
         // Charity does not require a payment requisite.
         std::string requisite;
 
+
         if (category == domain::PayeeCategory::MobileOperator) {
-            const Reply requisiteInput = ctx.ui.prompt(
-                "Enter phone number (10 digits):"
-            );
+            while (true) {
+                const Reply requisiteInput = ctx.ui.prompt(
+                    "Enter phone number (10 digits):"
+                );
 
-            if (requisiteInput.nav != Nav::Ok) {
-                return requisiteInput.nav;
+                if (requisiteInput.nav != Nav::Ok) {
+                    return requisiteInput.nav;
+                }
+
+                requisite = requisiteInput.text;
+
+                if (requisite.size() != 10 ||
+                    requisite.find_first_not_of("0123456789") != std::string::npos) {
+                    ctx.ui.showError("Invalid phone number. Enter 10 digits.");
+                    continue;
+                }
+
+                break;
             }
-
-            requisite = requisiteInput.text;
-
-            if (requisite.size() != 10 ||
-                requisite.find_first_not_of("0123456789") != std::string::npos) {
-                ctx.ui.showError("Invalid phone number. Enter 10 digits.");
-                return Nav::Cancel;
-            }
-        }
-
-        const Reply amountInput = ctx.ui.prompt(
-            "Enter payment amount in UAH:"
-        );
-
-        if (amountInput.nav != Nav::Ok) {
-            return amountInput.nav;
         }
 
 
         domain::Money amount;
 
-        try {
-            amount = parseMoney(amountInput.text);
-        }
+        while (true) {
+            const Reply amountInput = ctx.ui.prompt(
+                "Enter payment amount in UAH:"
+            );
 
-        catch (const std::invalid_argument&) {
-            ctx.ui.showError("Invalid payment amount.");
-            return Nav::Cancel;
-        }
-        catch (const std::out_of_range&) {
-            ctx.ui.showError("Payment amount is too large.");
-            return Nav::Cancel;
-        }
-        catch (const domain::DomainError& e) {
-            if (e.reason() == domain::ErrorReason::InvalidAmount ||
-                e.reason() == domain::ErrorReason::Overflow) {
-                ctx.ui.showError("Invalid payment amount.");
-                return Nav::Cancel;
+            if (amountInput.nav != Nav::Ok) {
+                return amountInput.nav;
             }
 
-            throw;
+            try {
+                amount = parseMoney(amountInput.text);
+                break;
+            }
+            catch (const std::invalid_argument&) {
+                ctx.ui.showError("Invalid payment amount.");
+            }
+            catch (const std::out_of_range&) {
+                ctx.ui.showError("Payment amount is too large.");
+            }
+            catch (const domain::DomainError& e) {
+                if (e.reason() == domain::ErrorReason::InvalidAmount ||
+                    e.reason() == domain::ErrorReason::Overflow) {
+                    ctx.ui.showError("Invalid payment amount.");
+                    continue;
+                }
+
+                throw;
+            }
         }
 
         ctx.ui.showScreen("Payment details", {

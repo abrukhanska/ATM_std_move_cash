@@ -55,45 +55,47 @@ namespace atm::presentation {
         if (*choice.index < quickAmounts.size()) {
             amount = quickAmounts[*choice.index];
         }
+
         else {
-            const Reply input = ctx.ui.prompt(
-                "Enter amount in UAH (multiple of 100):"
-            );
+            while (true) {
+                const Reply input = ctx.ui.prompt(
+                    "Enter amount in UAH (multiple of 100):"
+                );
 
-            if (input.nav != Nav::Ok) {
-                return input.nav;
-            }
-
-
-            try {
-                amount = parseMoney(input.text);
-
-                if (amount.kopiykas() % 10'000 != 0) {
-                    ctx.ui.showError(
-                        "Amount must be positive and a multiple of 100 UAH."
-                    );
-                    return Nav::Cancel;
+                if (input.nav != Nav::Ok) {
+                    return input.nav;
                 }
-            }
 
-            catch (const std::invalid_argument&) {
-                ctx.ui.showError("Invalid amount.");
-                return Nav::Cancel;
-            }
-            catch (const std::out_of_range&) {
-                ctx.ui.showError("Amount is too large.");
-                return Nav::Cancel;
-            }
-            catch (const domain::DomainError& e) {
-                if (e.reason() == domain::ErrorReason::InvalidAmount ||
-                    e.reason() == domain::ErrorReason::Overflow) {
+                try {
+                    amount = parseMoney(input.text);
+
+                    if (amount.kopiykas() % 10'000 != 0) {
+                        ctx.ui.showError(
+                            "Amount must be positive and a multiple of 100 UAH."
+                        );
+                        continue;
+                    }
+
+                    break;
+                }
+                catch (const std::invalid_argument&) {
                     ctx.ui.showError("Invalid amount.");
-                    return Nav::Cancel;
                 }
+                catch (const std::out_of_range&) {
+                    ctx.ui.showError("Amount is too large.");
+                }
+                catch (const domain::DomainError& e) {
+                    if (e.reason() == domain::ErrorReason::InvalidAmount ||
+                        e.reason() == domain::ErrorReason::Overflow) {
+                        ctx.ui.showError("Invalid amount.");
+                        continue;
+                    }
 
-                throw;
+                    throw;
+                }
             }
         }
+
 
         const Nav confirmation = ctx.ui.confirm(
             "Withdraw " + amount.format() + "?"

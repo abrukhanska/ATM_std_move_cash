@@ -6,7 +6,6 @@
 #include "presentation/receipt_printer.hpp"
 #include "presentation/input_parsing.hpp"
 
-
 #include "application/transfer_service.hpp"
 
 #include "domain/card_number.hpp"
@@ -27,57 +26,57 @@ namespace atm::presentation {
             return Nav::Cancel;
         }
 
-        const Reply cardInput = ctx.ui.prompt(
-            "Enter recipient card number (16 digits):"
-        );
-
-        if (cardInput.nav != Nav::Ok) {
-            return cardInput.nav;
-        }
-
         domain::CardNumber recipientCard;
 
-        try {
-            recipientCard = parseCardNumber(cardInput.text);
+        while (true) {
+            const Reply cardInput = ctx.ui.prompt(
+                "Enter recipient card number (16 digits):"
+            );
+
+            if (cardInput.nav != Nav::Ok) {
+                return cardInput.nav;
+            }
+
+            try {
+                recipientCard = parseCardNumber(cardInput.text);
+                break;
+            }
+            catch (const std::invalid_argument&) {
+                ctx.ui.showError("Invalid card number.");
+            }
         }
-
-        catch (const std::invalid_argument&) {
-            ctx.ui.showError("Invalid card number.");
-            return Nav::Cancel;
-        }
-
-        const Reply amountInput = ctx.ui.prompt(
-            "Enter transfer amount in UAH:"
-        );
-
-        if (amountInput.nav != Nav::Ok) {
-            return amountInput.nav;
-        }
-
 
         domain::Money amount;
 
-        try {
-            amount = parseMoney(amountInput.text);
-        }
-        catch (const std::invalid_argument&) {
-            ctx.ui.showError("Invalid transfer amount.");
-            return Nav::Cancel;
-        }
-        catch (const std::out_of_range&) {
-            ctx.ui.showError("Transfer amount is too large.");
-            return Nav::Cancel;
-        }
-        catch (const domain::DomainError& e) {
-            if (e.reason() == domain::ErrorReason::InvalidAmount ||
-                e.reason() == domain::ErrorReason::Overflow) {
-                ctx.ui.showError("Invalid transfer amount.");
-                return Nav::Cancel;
+        while (true) {
+            const Reply amountInput = ctx.ui.prompt(
+                "Enter transfer amount in UAH:"
+            );
+
+            if (amountInput.nav != Nav::Ok) {
+                return amountInput.nav;
             }
 
-            throw;
-        }
+            try {
+                amount = parseMoney(amountInput.text);
+                break;
+            }
+            catch (const std::invalid_argument&) {
+                ctx.ui.showError("Invalid transfer amount.");
+            }
+            catch (const std::out_of_range&) {
+                ctx.ui.showError("Transfer amount is too large.");
+            }
+            catch (const domain::DomainError& e) {
+                if (e.reason() == domain::ErrorReason::InvalidAmount ||
+                    e.reason() == domain::ErrorReason::Overflow) {
+                    ctx.ui.showError("Invalid transfer amount.");
+                    continue;
+                }
 
+                throw;
+            }
+        }
 
         application::TransferPreview preview;
 
@@ -143,7 +142,6 @@ namespace atm::presentation {
                 preview
             );
         }
-
         catch (const domain::DomainError& e) {
             switch (e.reason()) {
             case domain::ErrorReason::InsufficientFunds:
@@ -170,7 +168,6 @@ namespace atm::presentation {
                 throw;
             }
         }
-
 
         ctx.ui.showScreen("Transfer successful", {
             "Recipient: " + preview.recipientName,
