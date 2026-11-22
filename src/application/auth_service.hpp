@@ -3,7 +3,7 @@
 
 #include "domain/istorage.hpp"
 #include "application/pin_hasher.hpp"
-#include "domain/enums.hpp"
+#include "application/app_types.hpp"
 #include "domain/atm_config.hpp"
 #include "domain/pin_code.hpp"
 
@@ -12,10 +12,12 @@ namespace atm::application {
     class AuthService {
     public:
         AuthService(domain::IStorage& storage, const PinHasher& pinHasher, domain::Clock clock)
-            : storage_(storage), pinHasher_(pinHasher), clock_(std::move(clock)) {}
+            : storage_(storage), pinHasher_(pinHasher), clock_(std::move(clock)) {
+                if(!clock_) throw domain::DomainError(domain::ErrorReason::InvalidData);
+            }
 
-        [[nodiscard]] domain::CardInspection inspect(const domain::CardNumber& actor) const;
-        domain::AuthStatus authenticate(const domain::CardNumber& actor, const domain::PinCode& pin);
+        [[nodiscard]] CardInspection inspect(const domain::CardNumber& actor) const;
+        AuthStatus authenticate(const domain::CardNumber& actor, const domain::PinCode& pin);
         void changePin(const domain::CardNumber& actor, const domain::PinCode& oldPin, const domain::PinCode& newPin);
 
     private:

@@ -8,7 +8,9 @@ namespace atm::application {
     class CardAdministrationService {
     public:
         CardAdministrationService(domain::IStorage& storage, domain::Clock clock)
-            : storage_(storage), clock_(std::move(clock)) {}
+            : storage_(storage), clock_(std::move(clock)) {
+                if (!clock_) throw domain::DomainError(domain::ErrorReason::InvalidData);
+            }
 
         [[nodiscard]] std::vector<domain::Card> listRetained(const domain::CardNumber& actor) const;
         domain::JournalEntry release(const domain::CardNumber& actor, const domain::CardNumber& retainedCard);

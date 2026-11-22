@@ -7,7 +7,7 @@ namespace atm::infrastructure::sql {
 
     class Database;
 
-    class CardRepository : public domain::ICardRepository {
+    class CardRepository final : public domain::ICardRepository {
     public:
         explicit CardRepository(Database& db) : db_(db) {}
         

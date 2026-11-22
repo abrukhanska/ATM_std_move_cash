@@ -7,7 +7,7 @@ namespace atm::infrastructure::sql {
 
     class Database;
 
-    class CashRepository : public domain::ICashRepository {
+    class CashRepository final : public domain::ICashRepository {
     public:
         explicit CashRepository(Database& db) : db_(db) {}
         

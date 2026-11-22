@@ -4,19 +4,11 @@
 #include "domain/domain_error.hpp"
 
 #include <sqlite3.h>
+#include "infrastructure/sql/stmt.hpp"
 #include <cstdint>
 #include <limits>
 
 namespace atm::infrastructure::sql {
-
-    struct StmtFinalizer {
-        void operator()(sqlite3_stmt* stmt) const noexcept {
-            if (stmt) {
-                sqlite3_finalize(stmt);
-            }
-        }
-    };
-    using Stmt = std::unique_ptr<sqlite3_stmt, StmtFinalizer>;
 
     namespace {
         std::string extractString(sqlite3_stmt* stmt, int column) {
@@ -24,31 +16,20 @@ namespace atm::infrastructure::sql {
                 return {};
             }
             const auto* text_ptr = reinterpret_cast<const char*>(sqlite3_column_text(stmt, column));
-            int length = sqlite3_column_bytes(stmt, column);
-            if (!text_ptr || length <= 0) {
+            int text_length = sqlite3_column_bytes(stmt, column);
+            if (!text_ptr || text_length <= 0) {
                 return {};
             }
-            return std::string(text_ptr, static_cast<std::size_t>(length));
+            return std::string(text_ptr, static_cast<std::size_t>(text_length));
         }
 
-        std::optional<domain::AccountId> extractAccountId(sqlite3_stmt* stmt, int column) {
-            if (sqlite3_column_type(stmt, column) == SQLITE_NULL) {
-                return std::nullopt;
-            }
-            domain::AccountId id = sqlite3_column_int64(stmt, column);
-            if (id <= 0) {
-                throw StorageError("JournalRepository::extractAccountId", SQLITE_CORRUPT, "Invalid account_id");
-            }
-            return id;
-        }
-
-        std::optional<std::int64_t> extractPayeeId(sqlite3_stmt* stmt, int column) {
+        std::optional<std::int64_t> extractOptionalId(sqlite3_stmt* stmt, int column, const char* field_name) {
             if (sqlite3_column_type(stmt, column) == SQLITE_NULL) {
                 return std::nullopt;
             }
             std::int64_t id = sqlite3_column_int64(stmt, column);
             if (id <= 0) {
-                throw StorageError("JournalRepository::extractPayeeId", SQLITE_CORRUPT, "Invalid payee_id");
+                throw StorageError("JournalRepository::extractOptionalId", SQLITE_CORRUPT, std::string("Invalid ") + field_name);
             }
             return id;
         }
@@ -58,11 +39,9 @@ namespace atm::infrastructure::sql {
             if (!card_ptr) {
                 throw StorageError("JournalRepository::extractCard", SQLITE_CORRUPT, "Null card_number");
             }
-            int length = sqlite3_column_bytes(stmt, column);
+            int card_length = sqlite3_column_bytes(stmt, column);
             try {
-                return domain::CardNumber::parse(
-                    std::string_view(card_ptr, static_cast<std::size_t>(length))
-                );
+                return domain::CardNumber::parse(std::string_view(card_ptr, static_cast<std::size_t>(card_length)));
             } catch (const std::invalid_argument&) {
                 throw StorageError("JournalRepository::extractCard", SQLITE_CORRUPT, "Invalid card_number");
             }
@@ -86,9 +65,7 @@ namespace atm::infrastructure::sql {
         domain::JournalEntry extractEntry(sqlite3_stmt* stmt) {
             domain::JournalEntry entry;
             entry.id = sqlite3_column_int64(stmt, 0);
-            if (entry.id <= 0) {
-                throw StorageError("JournalRepository::extractEntry", SQLITE_CORRUPT, "Invalid journal_id");
-            }
+            if (entry.id <= 0) throw StorageError("JournalRepository::extractEntry", SQLITE_CORRUPT, "Invalid journal_id");
 
             entry.atUtc = sqlite3_column_int64(stmt, 1);
 
@@ -105,8 +82,8 @@ namespace atm::infrastructure::sql {
             entry.kind = optional_kind.value();
 
             entry.actor = extractCard(stmt, 4);
-            entry.account = extractAccountId(stmt, 5);
-            entry.target = extractAccountId(stmt, 6);
+            entry.account = extractOptionalId(stmt, 5, "account_id");
+            entry.target = extractOptionalId(stmt, 6, "target_account_id");
             entry.subjectCard = extractOptionalCard(stmt, 7);
 
             entry.amount = [&]() {
@@ -130,8 +107,7 @@ namespace atm::infrastructure::sql {
                 .with(domain::Denomination::UAH1000, uah1000)
                 .with(domain::Denomination::UAH2000, uah2000);
 
-            entry.payeeId = extractPayeeId(stmt, 14);
-
+            entry.payeeId = extractOptionalId(stmt, 14, "payee_id");
             entry.requisite = extractString(stmt, 15);
 
             return entry;
@@ -149,23 +125,19 @@ namespace atm::infrastructure::sql {
 
     domain::JournalEntry JournalRepository::append(const domain::JournalEntry &entry)
     {
-        sqlite3* handle = db_.handle();
-        sqlite3_stmt* stmt_ptr = nullptr;
+        if (!domain::isValidJournalEntry(entry)) {
+            throw StorageError("JournalRepository::append", SQLITE_CONSTRAINT, "Inconsistent journal entry");
+        }
 
+        sqlite3* handle = db_.handle();
         const char* sql = "INSERT INTO journal "
                           "(at_utc, local_day, kind, actor_card, account_id, target_account_id, subject_card, amount_kop, "
                           "cash_100, cash_200, cash_500, cash_1000, cash_2000, "
                           "payee_id, requisite) "
                           "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);";
+        Stmt stmt = prepare(handle, sql, "JournalRepository::append prepare");
 
-        int rc = sqlite3_prepare_v2(handle, sql, -1, &stmt_ptr, nullptr);
-        if (rc != SQLITE_OK) {
-            throw StorageError("JournalRepository::append prepare", rc, sqlite3_errmsg(handle));
-        }
-
-        Stmt stmt(stmt_ptr);
-
-        std::string_view kind_sv = domain::toString(entry.kind);
+        std::string_view kind = domain::toString(entry.kind);
         std::string actor = entry.actor.str();
         std::optional<std::string> subject_card = entry.subjectCard ? std::make_optional(entry.subjectCard->str()) : std::nullopt;
 
@@ -177,10 +149,10 @@ namespace atm::infrastructure::sql {
 
         if (sqlite3_bind_int64(stmt.get(), 1, entry.atUtc) != SQLITE_OK ||
             sqlite3_bind_text(stmt.get(), 2, entry.localDay.data(), static_cast<int>(entry.localDay.size()), SQLITE_TRANSIENT) != SQLITE_OK ||
-            sqlite3_bind_text(stmt.get(), 3, kind_sv.data(), static_cast<int>(kind_sv.size()), SQLITE_TRANSIENT) != SQLITE_OK ||
+            sqlite3_bind_text(stmt.get(), 3, kind.data(), static_cast<int>(kind.size()), SQLITE_TRANSIENT) != SQLITE_OK ||
             sqlite3_bind_text(stmt.get(), 4, actor.data(), static_cast<int>(actor.size()), SQLITE_TRANSIENT) != SQLITE_OK ||
-            bindInt64(stmt.get(), 5, entry.account ? std::make_optional(static_cast<std::int64_t>(*entry.account)) : std::nullopt) != SQLITE_OK ||
-            bindInt64(stmt.get(), 6, entry.target ? std::make_optional(static_cast<std::int64_t>(*entry.target)) : std::nullopt) != SQLITE_OK ||
+            bindInt64(stmt.get(), 5, entry.account) != SQLITE_OK ||
+            bindInt64(stmt.get(), 6, entry.target) != SQLITE_OK ||
             bindString(stmt.get(), 7, subject_card) != SQLITE_OK ||
             sqlite3_bind_int64(stmt.get(), 8, entry.amount.kopiykas()) != SQLITE_OK ||
             sqlite3_bind_int64(stmt.get(), 9, uah100) != SQLITE_OK ||
@@ -188,12 +160,12 @@ namespace atm::infrastructure::sql {
             sqlite3_bind_int64(stmt.get(), 11, uah500) != SQLITE_OK ||
             sqlite3_bind_int64(stmt.get(), 12, uah1000) != SQLITE_OK ||
             sqlite3_bind_int64(stmt.get(), 13, uah2000) != SQLITE_OK ||
-            bindInt64(stmt.get(), 14, entry.payeeId.value_or(0) > 0 ? entry.payeeId : std::nullopt) != SQLITE_OK ||
-            bindString(stmt.get(), 15, entry.requisite.empty() ? std::nullopt : std::make_optional(entry.requisite)) != SQLITE_OK) {
+            bindInt64(stmt.get(), 14, entry.payeeId) != SQLITE_OK ||
+            bindString(stmt.get(), 15, entry.requisite) != SQLITE_OK) {
             throw StorageError("JournalRepository::append bind", SQLITE_ERROR, sqlite3_errmsg(handle));
         }
 
-        rc = sqlite3_step(stmt.get());
+        int rc = sqlite3_step(stmt.get());
         if (rc != SQLITE_DONE) {
             throw StorageError("JournalRepository::append step", rc, sqlite3_errmsg(handle));
         }
@@ -210,26 +182,19 @@ namespace atm::infrastructure::sql {
         }
 
         sqlite3* handle = db_.handle();
-        sqlite3_stmt* stmt_ptr = nullptr;
-
-        const char* sql = "SELECT journal_id, at_utc, local_day, kind, actor_card, account_id, "
-                          "target_account_id, subject_card, amount_kop, "
+        const char* sql = "SELECT journal_id, at_utc, local_day, kind, actor_card, account_id, target_account_id, subject_card, amount_kop, "
                           "cash_100, cash_200, cash_500, cash_1000, cash_2000, "
                           "payee_id, requisite "
                           "FROM journal ORDER BY journal_id DESC LIMIT ?;";
-
-        int rc = sqlite3_prepare_v2(handle, sql, -1, &stmt_ptr, nullptr);
-        if (rc != SQLITE_OK) {
-            throw StorageError("JournalRepository::last prepare", rc, sqlite3_errmsg(handle));
-        }
-
-        Stmt stmt(stmt_ptr);
+        Stmt stmt = prepare(handle, sql, "JournalRepository::last prepare");
 
         if (sqlite3_bind_int64(stmt.get(), 1, static_cast<sqlite3_int64>(count)) != SQLITE_OK) {
             throw StorageError("JournalRepository::last bind", SQLITE_ERROR, sqlite3_errmsg(handle));
         }
 
         std::vector<domain::JournalEntry> entries;
+
+        int rc = SQLITE_OK;
         while ((rc = sqlite3_step(stmt.get())) == SQLITE_ROW) {
             entries.push_back(extractEntry(stmt.get()));
         }
@@ -243,14 +208,8 @@ namespace atm::infrastructure::sql {
     domain::Money JournalRepository::withdrawnOn(const domain::CardNumber &number, const std::string &day) const
     {
         sqlite3* handle = db_.handle();
-        sqlite3_stmt* stmt_ptr = nullptr;
         const char* sql = "SELECT SUM(amount_kop) FROM journal WHERE actor_card = ? AND local_day = ? AND kind = ?;";
-
-        int rc = sqlite3_prepare_v2(handle, sql, -1, &stmt_ptr, nullptr);
-        if (rc != SQLITE_OK) {
-            throw StorageError("JournalRepository::withdrawnOn prepare", rc, sqlite3_errmsg(handle));
-        }
-        Stmt stmt(stmt_ptr);
+        Stmt stmt = prepare(handle, sql, "JournalRepository::withdrawnOn prepare");
 
         std::string card_number = number.str();
         std::string_view kind_withdraw = domain::toString(domain::EntryKind::Withdrawal);
@@ -258,10 +217,11 @@ namespace atm::infrastructure::sql {
         if (sqlite3_bind_text(stmt.get(), 1, card_number.data(), static_cast<int>(card_number.size()), SQLITE_TRANSIENT) != SQLITE_OK ||
             sqlite3_bind_text(stmt.get(), 2, day.data(), static_cast<int>(day.size()), SQLITE_TRANSIENT) != SQLITE_OK ||
             sqlite3_bind_text(stmt.get(), 3, kind_withdraw.data(), static_cast<int>(kind_withdraw.size()), SQLITE_TRANSIENT) != SQLITE_OK) {
+
             throw StorageError("JournalRepository::withdrawnOn bind", SQLITE_ERROR, sqlite3_errmsg(handle));
         }
 
-        rc = sqlite3_step(stmt.get());
+        int rc = sqlite3_step(stmt.get());
         if (rc == SQLITE_ROW) {
             if (sqlite3_column_type(stmt.get(), 0) == SQLITE_NULL) {
                 return domain::Money::ofKopiykas(0);
@@ -272,9 +232,7 @@ namespace atm::infrastructure::sql {
                 throw StorageError("JournalRepository::withdrawnOn", SQLITE_CORRUPT, "Invalid SUM(amount_kop)");
             }
         }
-        if (rc != SQLITE_DONE) {
-            throw StorageError("JournalRepository::withdrawnOn step", rc, sqlite3_errmsg(handle));
-        }
+        if (rc != SQLITE_DONE) throw StorageError("JournalRepository::withdrawnOn step", rc, sqlite3_errmsg(handle));
 
         return domain::Money::ofKopiykas(0);
     }
@@ -282,23 +240,15 @@ namespace atm::infrastructure::sql {
     domain::Money JournalRepository::sumAmount(domain::EntryKind kind) const
     {
         sqlite3* handle = db_.handle();
-        sqlite3_stmt* stmt_ptr = nullptr;
-
         const char* sql = "SELECT SUM(amount_kop) FROM journal WHERE kind = ?;";
+        Stmt stmt = prepare(handle, sql, "JournalRepository::sumAmount prepare");
 
-        int rc = sqlite3_prepare_v2(handle, sql, -1, &stmt_ptr, nullptr);
-        if (rc != SQLITE_OK) {
-            throw StorageError("JournalRepository::sumAmount prepare", rc, sqlite3_errmsg(handle));
-        }
-
-        Stmt stmt(stmt_ptr);
         std::string_view kind_sv = domain::toString(kind);
-
         if (sqlite3_bind_text(stmt.get(), 1, kind_sv.data(), static_cast<int>(kind_sv.size()), SQLITE_TRANSIENT) != SQLITE_OK) {
             throw StorageError("JournalRepository::sumAmount bind kind", SQLITE_ERROR, sqlite3_errmsg(handle));
         }
 
-        rc = sqlite3_step(stmt.get());
+        int rc = sqlite3_step(stmt.get());
         if (rc == SQLITE_ROW) {
             if (sqlite3_column_type(stmt.get(), 0) == SQLITE_NULL) {
                 return domain::Money::ofKopiykas(0);
@@ -309,9 +259,7 @@ namespace atm::infrastructure::sql {
                 throw StorageError("JournalRepository::sumAmount", SQLITE_CORRUPT, "Invalid SUM(amount_kop)");
             }
         }
-        if (rc != SQLITE_DONE) {
-            throw StorageError("JournalRepository::sumAmount step", rc, sqlite3_errmsg(handle));
-        }
+        if (rc != SQLITE_DONE) throw StorageError("JournalRepository::sumAmount step", rc, sqlite3_errmsg(handle));
 
         return domain::Money::ofKopiykas(0);
     }

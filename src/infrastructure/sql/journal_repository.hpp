@@ -7,7 +7,7 @@ namespace atm::infrastructure::sql {
 
 	class Database;
 
-	class JournalRepository : public domain::IJournalRepository {
+	class JournalRepository final : public domain::IJournalRepository {
 	public:
 		explicit JournalRepository(Database& db) : db_(db) {}
 

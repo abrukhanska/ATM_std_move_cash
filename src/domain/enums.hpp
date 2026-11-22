@@ -13,8 +13,6 @@ namespace atm::domain {
     enum class CardStatus { Active, Retained };
     enum class Denomination { UAH100, UAH200, UAH500, UAH1000, UAH2000 };
     enum class PayeeCategory { MobileOperator, Charity };
-    enum class CardInspection { Unknown, Retained, Client, Service };
-    enum class AuthStatus { Ok, WrongPin, Retained };
 
     enum class EntryKind {
         Withdrawal,

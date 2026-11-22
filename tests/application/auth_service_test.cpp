@@ -17,9 +17,9 @@ namespace {
 
     using atm::application::AuthService;
     using atm::application::PinHasher;
-    using atm::domain::AuthStatus;
+    using atm::application::AuthStatus;
     using atm::domain::Card;
-    using atm::domain::CardInspection;
+    using atm::application::CardInspection;
     using atm::domain::CardKind;
     using atm::domain::CardNumber;
     using atm::domain::CardStatus;

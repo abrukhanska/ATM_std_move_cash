@@ -19,6 +19,7 @@ namespace atm::infrastructure::sql {
             throw StorageError("sqlite3_open", rc, reason);
         }
 
+        sqlite3_busy_timeout(db, 5000);
         init();
     }
 
@@ -56,13 +57,14 @@ namespace atm::infrastructure::sql {
 
     void Database::rollback() noexcept
     {
-        char* error_message = nullptr;
-        int rc = sqlite3_exec(handle_.get(), "ROLLBACK;", nullptr, nullptr, &error_message);
-
-        if(rc != SQLITE_OK) {
-            if(error_message) sqlite3_free(error_message);
-            broken_ = true;
+        sqlite3* handle = handle_.get();
+        if (!handle || sqlite3_get_autocommit(handle) != 0) {
+            return;
         }
+        char* error_message = nullptr;
+        int rc = sqlite3_exec(handle, "ROLLBACK;", nullptr, nullptr, &error_message);
+        if(error_message) sqlite3_free(error_message);
+        if(rc != SQLITE_OK) broken_ = true;
     }
 
     sqlite3* Database::handle() const {

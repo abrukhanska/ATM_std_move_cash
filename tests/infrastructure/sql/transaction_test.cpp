@@ -9,6 +9,7 @@
 
 #include <filesystem>
 #include <string>
+#include <string_view>
 
 namespace {
 
@@ -180,6 +181,47 @@ TEST(X2Transaction, RollbackAfterFailedCommit) {
     if (std::filesystem::exists(db_path)) std::filesystem::remove(db_path);
 }
 
+TEST(X2Transaction, RollbackWhenTransactionAlreadyEndedDoesNotBreakDatabase) {
+    const std::string db_path = "test_db.db";
+    if (std::filesystem::exists(db_path)) std::filesystem::remove(db_path);
+
+    {
+        Database db(db_path);
+        int rc = sqlite3_exec(
+            db.handle(),
+            "INSERT INTO cards VALUES ('1111222233334444', 'Client', 'hash1', 'Client', 'Active', 0);",
+            nullptr, nullptr, nullptr);
+        EXPECT_TRUE(rc == SQLITE_OK);
+
+        db.rollback();
+        EXPECT_FALSE(db.broken());
+
+        // Ending the transaction early before Transaction destructor runs must also keep db healthy
+        {
+            Transaction transaction(db);
+            CardRepository repo(db);
+
+            auto cardOpt = repo.find(CardNumber::parse("1111222233334444"));
+            EXPECT_TRUE(cardOpt.has_value());
+            Card card = cardOpt.value();
+            card.registerFailedAttempt();
+            repo.save(card);
+
+            int raw_rc = sqlite3_exec(db.handle(), "ROLLBACK;", nullptr, nullptr, nullptr);
+            EXPECT_TRUE(raw_rc == SQLITE_OK);
+        }
+
+        EXPECT_FALSE(db.broken());
+
+        CardRepository repo(db);
+        auto reloaded = repo.find(CardNumber::parse("1111222233334444"));
+        EXPECT_TRUE(reloaded.has_value());
+        EXPECT_EQ(reloaded->failedAttempts(), 0u);
+    }
+
+    if (std::filesystem::exists(db_path)) std::filesystem::remove(db_path);
+}
+
 TEST(X2Transaction, FailedRollbackMarksDatabaseBroken) {
     const std::string db_path = "test_db.db";
     if (std::filesystem::exists(db_path)) std::filesystem::remove(db_path);
@@ -192,11 +234,30 @@ TEST(X2Transaction, FailedRollbackMarksDatabaseBroken) {
             nullptr, nullptr, nullptr);
         EXPECT_TRUE(rc == SQLITE_OK);
 
+        rc = sqlite3_set_authorizer(
+            db.handle(),
+            [](void*, int action_code, const char* arg1, const char*, const char*, const char*) {
+                if (action_code == SQLITE_TRANSACTION && arg1 != nullptr && std::string_view(arg1) == "ROLLBACK") {
+                    return SQLITE_DENY;
+                }
+                return SQLITE_OK;
+            },
+            nullptr);
+        EXPECT_TRUE(rc == SQLITE_OK);
+
         {
             Transaction transaction(db);
-            int raw_rc = sqlite3_exec(db.handle(), "ROLLBACK;", nullptr, nullptr, nullptr);
-            EXPECT_TRUE(raw_rc == SQLITE_OK);
+            EXPECT_EQ(sqlite3_get_autocommit(db.handle()), 0);
+
+            CardRepository repo(db);
+            auto cardOpt = repo.find(CardNumber::parse("1111222233334444"));
+            EXPECT_TRUE(cardOpt.has_value());
+            Card card = cardOpt.value();
+            card.registerFailedAttempt();
+            repo.save(card);
         }
+
+        EXPECT_TRUE(db.broken());
 
         bool query_rejected = false;
         try {

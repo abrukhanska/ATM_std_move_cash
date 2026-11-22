@@ -38,10 +38,10 @@ namespace atm::presentation {
         const domain::CardNumber card =
             domain::CardNumber::parse(reply.text);
 
-        const domain::CardInspection inspection =
+        const application::CardInspection inspection =
             ctx.auth.inspect(card);
 
-        if (inspection != domain::CardInspection::Service) {
+        if (inspection != application::CardInspection::Service) {
             ctx.ui.showError("Service card required.");
             return nullptr;
         }
