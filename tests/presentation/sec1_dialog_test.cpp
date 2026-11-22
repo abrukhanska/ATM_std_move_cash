@@ -74,7 +74,7 @@ namespace {
         atm::test::TestAtmContext f;
         seedClient(f);
 
-        f.input.str("1234\n5678\n8765\n");
+        f.input.str("1234\n5678\n8765\ncancel\n");
 
         Session session(cardNumber, CardKind::Client);
 
@@ -101,7 +101,7 @@ namespace {
         atm::test::TestAtmContext f;
         seedClient(f);
 
-        f.input.str("1234\n99999\n99999\n");
+        f.input.str("1234\n99999\n99999\ncancel\n");
 
         Session session(cardNumber, CardKind::Client);
 

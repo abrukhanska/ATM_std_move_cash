@@ -176,7 +176,7 @@ namespace {
                 fixture.withdrawal.quickAmounts().size() + 1;
 
             fixture.input.str(
-                std::to_string(customOption) + "\n" + text + "\n"
+                std::to_string(customOption) + "\n" + text + "\ncancel\n"
             );
 
             const auto result = atm::presentation::withdrawDialog(
@@ -288,7 +288,7 @@ namespace {
                 f.withdrawal.quickAmounts().size() + 1;
 
             f.input.str(
-                std::to_string(option) + "\n" + value + "\n"
+                std::to_string(option) + "\n" + value + "\ncancel\n"
             );
 
             EXPECT_EQ(
@@ -407,7 +407,7 @@ namespace {
             );
 
 
-            f.input.str("2\n1\n" + value + "\n");
+            f.input.str("2\n1\n" + value + "\ncancel\n");
 
             const auto result =
                 atm::presentation::paymentDialog(f.ctx, session);
@@ -506,7 +506,7 @@ namespace {
             const auto before =
                 f.storage.accounts().find(1)->balance();
 
-            f.input.str(recipient.str() + "\n" + value + "\n");
+            f.input.str(recipient.str() + "\n" + value + "\ncancel\n");
 
             EXPECT_EQ(
                 atm::presentation::transferDialog(f.ctx, session),
@@ -534,7 +534,7 @@ namespace {
             sender, atm::domain::CardKind::Client, 1
         );
 
-        f.input.str("abc\n");
+        f.input.str("abc\ncancel\n");
 
         EXPECT_EQ(
             atm::presentation::transferDialog(f.ctx, session),
@@ -628,7 +628,7 @@ namespace {
                 f.withdrawal.quickAmounts().size() + 1;
 
             f.input.str(
-                std::to_string(option) + "\n" + value + "\n"
+                std::to_string(option) + "\n" + value + "\ncancel\n"
             );
 
             EXPECT_EQ(

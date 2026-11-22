@@ -76,7 +76,13 @@ namespace atm::presentation {
         const std::time_t timestamp = static_cast<std::time_t>(entry.atUtc);
         std::tm local{};
 
-        if (localtime_s(&local, &timestamp) == 0) {
+#ifdef _WIN32
+        const bool timeValid = (localtime_s(&local, &timestamp) == 0);
+#else
+        const bool timeValid = (localtime_r(&timestamp, &local) != nullptr);
+#endif
+
+        if (timeValid) {
             std::ostringstream timeStream;
             timeStream << std::put_time(&local, "%H:%M:%S");
             printField(out_, "Time (local): ", timeStream.str());
