@@ -57,14 +57,18 @@ namespace atm::infrastructure::sql {
             }
             std::uint8_t failed_attempts = static_cast<std::uint8_t>(failed_attempts_int64);
 
-            return domain::Card(
-                card_number,
-                holder_name,
-                pin_hash,
-                kind,
-                status,
-                failed_attempts
-            );
+            try {
+                return domain::Card(
+                    card_number,
+                    holder_name,
+                    pin_hash,
+                    kind,
+                    status,
+                    failed_attempts
+                );
+            } catch (const std::invalid_argument& ex) {
+                throw StorageError("CardRepository::extractCard", SQLITE_CORRUPT, ex.what());
+            }
         }
     }
 

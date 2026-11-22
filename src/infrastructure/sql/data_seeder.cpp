@@ -26,7 +26,6 @@ namespace atm::infrastructure::sql {
             if (sqlite3_column_type(stmt, columnIndex) != SQLITE_TEXT) {
                 throw StorageError(context, SQLITE_CORRUPT, "Expected TEXT value");
             }
-
             const auto* text_ptr = reinterpret_cast<const char*>(sqlite3_column_text(stmt, columnIndex));
             const int text_length = sqlite3_column_bytes(stmt, columnIndex);
             if (!text_ptr || text_length < 0) {
@@ -209,9 +208,9 @@ namespace atm::infrastructure::sql {
                 }
 
                 if (kind == client) {
-                    const bool valid_active = (status == active && failed_attempts >= 0 && failed_attempts <= 2);
-                    const bool valid_retained = (status == retained && failed_attempts == 3);
-                    if (!valid_active && !valid_retained) {
+                    const bool status_active = (status == active && failed_attempts >= 0 && failed_attempts <= 2);
+                    const bool status_retained = (status == retained && failed_attempts == 3);
+                    if (!status_active && !status_retained) {
                         throw StorageError("validateDatabase cards", SQLITE_CORRUPT, "Inconsistent client card status or attempts");
                     }
                     if (total_accounts < 1 || primary_accounts != 1) {

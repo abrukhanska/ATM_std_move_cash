@@ -67,8 +67,8 @@ TEST(DB1Database, DBInitialAndRepeatedLaunch) {
             account->debit(Money::uah(2500)); // 30000 -> 27500 uah
             db.accounts().save(*account);
 
-            BanknoteSet updated_notes = db.cash().load().with(Denomination::UAH500, 12);
-            db.cash().save(updated_notes);
+            BanknoteSet updated_banknotes = db.cash().load().with(Denomination::UAH500, 12);
+            db.cash().save(updated_banknotes);
 
             auto card = db.cards().find(client_number);
             EXPECT_TRUE(card.has_value());
@@ -159,6 +159,25 @@ TEST(DB1Database, RejectsIncompleteOrIncompatibleDatabase) {
         int rc = sqlite3_exec(db.handle(), "UPDATE accounts SET is_primary = 0;", nullptr, nullptr, nullptr);
         EXPECT_TRUE(rc == SQLITE_OK);
 
+        bool rejected = false;
+        try {
+            validateDatabase(db);
+        } catch (const StorageError&) {
+            rejected = true;
+        }
+        EXPECT_TRUE(rejected);
+    }
+
+    std::filesystem::remove(db_path);
+
+    // Incompatible schema
+    {
+        sqlite3* handle = nullptr;
+        EXPECT_TRUE(sqlite3_open(db_path.data(), &handle) == SQLITE_OK);
+        EXPECT_TRUE(sqlite3_exec(handle, "CREATE TABLE cards (card_number TEXT PRIMARY KEY);", nullptr, nullptr, nullptr) == SQLITE_OK);
+        sqlite3_close(handle);
+
+        Database db(db_path);
         bool rejected = false;
         try {
             validateDatabase(db);
