@@ -9,13 +9,13 @@ namespace atm::application {
     using domain::CardKind;
     using domain::CardStatus;
 
-    std::vector<domain::Account> atm::application::AccountService::accountsOf(const domain::CardNumber& actor) const
+    std::vector<domain::Account> AccountService::accountsOf(const domain::CardNumber& actor) const
     {
         (void)detail::requireActiveClient(storage_, actor);
         return storage_.accounts().listByCard(actor);
     }
 
-    domain::Money atm::application::AccountService::balance(const domain::CardNumber& actor, domain::AccountId accountId) const
+    domain::Money AccountService::balance(const domain::CardNumber& actor, domain::AccountId accountId) const
     {
         (void)detail::requireActiveClient(storage_, actor);
         const auto account = detail::requireOwnedAccount(storage_, actor, accountId);

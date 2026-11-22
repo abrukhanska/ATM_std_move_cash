@@ -17,7 +17,7 @@ include(FetchContent)
 FetchContent_Declare(
     picosha2
     GIT_REPOSITORY https://github.com/okdshin/PicoSHA2.git
-    GIT_TAG master
+    GIT_TAG 161cb3fc4170fa7a3eca9e582cebd27cc4d1fe29
 )
 FetchContent_MakeAvailable(picosha2)
 

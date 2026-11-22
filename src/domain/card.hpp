@@ -6,15 +6,12 @@
 
 namespace atm::domain {
 
+    // Represents a bank card and its authentication state.
+    // Stores the card number, holder name, PIN hash, card type,
+    // status, and number of consecutive failed login attempts.
     class Card {
     public:
-        Card(CardNumber number, std::string holderName, std::string pinHash, CardKind kind, CardStatus status = CardStatus::Active, std::uint8_t failedAttempts = 0)
-            : number_(std::move(number)), holderName_(std::move(holderName)), pinHash_(std::move(pinHash)), kind_(kind), status_(status), failedAttempts_(failedAttempts) {
-                if (kind_ == CardKind::Service) {
-                    status_ = CardStatus::Active;
-                    failedAttempts_ = 0;
-                }
-        }
+        Card(CardNumber number, std::string holderName, std::string pinHash, CardKind kind, CardStatus status = CardStatus::Active, std::uint8_t failedAttempts = 0);
 
         [[nodiscard]] CardNumber number() const noexcept { return number_; }
         [[nodiscard]] const std::string& holderName() const noexcept { return holderName_; }

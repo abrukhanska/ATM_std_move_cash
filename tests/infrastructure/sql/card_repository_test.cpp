@@ -28,12 +28,10 @@ TEST(DB2CardRepository, FindUnknownCardReturnsEmpty) {
 
     {
         Database db(db_path);
-        CardRepository repo(db);
+        CardRepository repository(db);
 
-        auto unknown_number = CardNumber::parse("9999888877776666");
-        auto result = repo.find(unknown_number);
-
-        EXPECT_FALSE(result.has_value());
+        const auto unknown_number = CardNumber::parse("9999888877776666");
+        EXPECT_FALSE(repository.find(unknown_number).has_value());
     }
 
     if (std::filesystem::exists(db_path)) {
@@ -49,7 +47,7 @@ TEST(DB2CardRepository, PreservesLeadingZerosAndLengthOnReadAndWrite) {
 
     {
         Database db(db_path);
-        CardRepository repo(db);
+        CardRepository repository(db);
 
         const std::string number = "0000123456789012";
         const CardNumber card_number = CardNumber::parse(number);
@@ -58,15 +56,16 @@ TEST(DB2CardRepository, PreservesLeadingZerosAndLengthOnReadAndWrite) {
         int rc = sqlite3_exec(
             db.handle(),
             "INSERT INTO cards (card_number, holder_name, pin_hash, kind, status, failed_attempts) "
-            "VALUES ('0000123456789012', 'Client', 'hash1', 'Client', 'Active', 0);",
+            "VALUES ('0000123456789012', 'Client1', 'hash1', 'Client', 'Active', 0);",
             nullptr, nullptr, nullptr);
         EXPECT_TRUE(rc == SQLITE_OK);
 
-        auto found = repo.find(card_number);
-        EXPECT_TRUE(found.has_value());
+        auto found = repository.find(card_number);
+        ASSERT_TRUE(found.has_value());
         EXPECT_EQ(found->number().str(), number);
-        EXPECT_EQ(found->number().str().size(), 16u);
-        EXPECT_EQ(found->holderName(), std::string("Client"));
+        EXPECT_EQ(found->number().str().size(), std::size_t{ 16 });
+        EXPECT_EQ(found->holderName(), std::string("Client1"));
+        EXPECT_EQ(found->pinHash(), std::string("hash1"));
         EXPECT_TRUE(found->kind() == CardKind::Client);
         EXPECT_TRUE(found->status() == CardStatus::Active);
         EXPECT_EQ(found->failedAttempts(), 0);
@@ -74,11 +73,12 @@ TEST(DB2CardRepository, PreservesLeadingZerosAndLengthOnReadAndWrite) {
         found->registerFailedAttempt();
         found->registerFailedAttempt();
         found->registerFailedAttempt();
-        repo.save(*found);
+        repository.save(*found);
 
-        auto reloaded = repo.find(card_number);
-        EXPECT_TRUE(reloaded.has_value());
+        const auto reloaded = repository.find(card_number);
+        ASSERT_TRUE(reloaded.has_value());
         EXPECT_EQ(reloaded->number().str(), number);
+        EXPECT_EQ(reloaded->number().str().size(), std::size_t{ 16 });
         EXPECT_EQ(reloaded->failedAttempts(), 3);
         EXPECT_TRUE(reloaded->status() == CardStatus::Retained);
     }
@@ -100,33 +100,48 @@ TEST(DB2CardRepository, EnforcesDatabaseConstraints) {
         int rc = sqlite3_exec(
             db.handle(),
             "INSERT INTO cards (card_number, holder_name, pin_hash, kind, status, failed_attempts) "
-            "VALUES ('0000123456789012', 'Client', 'hash1', 'Client', 'Active', 0);",
+            "VALUES ('0000123456789012', 'Client1', 'hash1', 'Client', 'Active', 0);",
             nullptr, nullptr, nullptr);
         EXPECT_TRUE(rc == SQLITE_OK);
 
-        // Duplicate
-        int dup_rc = sqlite3_exec(
+        // Duplicate card_number
+        int wrong_rc1 = sqlite3_exec(
             db.handle(),
             "INSERT INTO cards (card_number, holder_name, pin_hash, kind, status, failed_attempts) "
-            "VALUES ('0000123456789012', 'Other Client', 'hash2', 'Client', 'Active', 0);",
+            "VALUES ('0000123456789012', 'Client2', 'hash2', 'Client', 'Active', 0);",
             nullptr, nullptr, nullptr);
-        EXPECT_TRUE(dup_rc != SQLITE_OK);
+        EXPECT_TRUE(wrong_rc1 != SQLITE_OK);
 
         // Account for a non-existent card
-        int fk_rc = sqlite3_exec(
+        int wrong_rc2 = sqlite3_exec(
             db.handle(),
             "INSERT INTO accounts (account_id, card_number, balance_kop, is_primary) "
             "VALUES (100, '9999000011112222', 5000, 1);",
             nullptr, nullptr, nullptr);
-        EXPECT_TRUE(fk_rc != SQLITE_OK);
+        EXPECT_TRUE(wrong_rc2 != SQLITE_OK);
 
-        // Invalid kind or status
-        int kind_rc = sqlite3_exec(
+        // Invalid kind
+        int wrong_rc3 = sqlite3_exec(
             db.handle(),
             "INSERT INTO cards (card_number, holder_name, pin_hash, kind, status, failed_attempts) "
             "VALUES ('1111222233334444', 'Admin', 'hash3', 'Admin', 'Active', 0);",
             nullptr, nullptr, nullptr);
-        EXPECT_TRUE(kind_rc != SQLITE_OK);
+        EXPECT_TRUE(wrong_rc3 != SQLITE_OK);
+
+        // Invalid status
+        int wrong_rc4 = sqlite3_exec(
+            db.handle(),
+            "INSERT INTO cards (card_number, holder_name, pin_hash, kind, status, failed_attempts) "
+            "VALUES ('1111222233334444', 'Client3', 'hash3', 'Client', 'Blocked', 0);",
+            nullptr, nullptr, nullptr);
+        EXPECT_TRUE(wrong_rc4 != SQLITE_OK);
+
+        int wrong_rc5 = sqlite3_exec(
+            db.handle(),
+            "INSERT INTO cards (card_number, holder_name, pin_hash, kind, status, failed_attempts) "
+            "VALUES ('0000123456789012', 'Client1', 'hash1', 'Client', 'Active', 4);",
+            nullptr, nullptr, nullptr);
+        EXPECT_TRUE(wrong_rc5 != SQLITE_OK);
     }
 
     if (std::filesystem::exists(db_path)) {
@@ -156,21 +171,17 @@ TEST(DB2CardRepository, RejectsOutOfRangeNumbersBeforeNarrowing) {
         EXPECT_TRUE(sqlite3_exec(db_ptr, create_sql, nullptr, nullptr, nullptr) == SQLITE_OK);
 
         const char* insert_sql =
-            "INSERT INTO cards (card_number, holder_name, pin_hash, kind, status, failed_attempts) "
-            "VALUES ('0000123456789012', 'Olena Koval', 'hash1', 'Client', 'Active', 5000000000);";
+            "INSERT INTO cards (card_number, holder_name, pin_hash, kind, status, failed_attempts) VALUES "
+            "('0000123456789012', 'Client1', 'hash1', 'Client', 'Active', 5000000000),"
+            "('0000123456789013', 'Client2', 'hash2', 'Client', 'Retained', 5000000000);";
         EXPECT_TRUE(sqlite3_exec(db_ptr, insert_sql, nullptr, nullptr, nullptr) == SQLITE_OK);
         sqlite3_close(db_ptr);
 
         Database db(db_path);
-        CardRepository repo(db);
+        CardRepository repository(db);
 
-        bool rejected = false;
-        try {
-            static_cast<void>(repo.find(CardNumber::parse("0000123456789012")));
-        } catch (const StorageError&) {
-            rejected = true;
-        }
-        EXPECT_TRUE(rejected);
+        EXPECT_THROW(static_cast<void>(repository.find(CardNumber::parse("0000123456789012"))), StorageError);
+        EXPECT_THROW(static_cast<void>(repository.listRetained()), StorageError);
     }
 
     if (std::filesystem::exists(db_path)) {
@@ -186,18 +197,21 @@ TEST(CardRepository, ListsOnlyRetainedCards) {
 
     {
         Database db(db_path);
-        CardRepository repo(db);
+        CardRepository repository(db);
+
+        EXPECT_TRUE(repository.listRetained().empty());
 
         int rc = sqlite3_exec(
             db.handle(),
             "INSERT INTO cards (card_number, holder_name, pin_hash, kind, status, failed_attempts) VALUES "
-            "('4000000000000001', 'Active Client', 'h1', 'Client', 'Active', 0),"
-            "('4000000000000002', 'Retained One', 'h2', 'Client', 'Retained', 3),"
-            "('4000000000000003', 'Retained Two', 'h3', 'Client', 'Retained', 3);",
+            "('4000000000000001', 'Client1', 'hash1', 'Client', 'Active', 0),"
+            "('4000000000000002', 'Client2', 'hash2', 'Client', 'Retained', 3),"
+            "('4000000000000003', 'Client3', 'hash3', 'Client', 'Retained', 3),"
+            "('4000000000000099', 'Operator', 'hash4', 'Service', 'Active', 0);",
             nullptr, nullptr, nullptr);
         EXPECT_TRUE(rc == SQLITE_OK);
 
-        const auto retained = repo.listRetained();
+        const auto retained = repository.listRetained();
         ASSERT_EQ(retained.size(), std::size_t{ 2 });
         EXPECT_EQ(retained[0].number(), CardNumber::parse("4000000000000002"));
         EXPECT_EQ(retained[1].number(), CardNumber::parse("4000000000000003"));

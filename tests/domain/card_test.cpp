@@ -24,29 +24,45 @@ static_assert(noexcept(std::declval<Card&>().release()));
 // --- number & holderName & pinHash & kind & status & failedAttempts ---
 
 TEST(V2Card, ConstructorInitializesFieldsCorrectly) {
-    const auto num = CardNumber::parse("4000123456789010");
-    const Card card(num, "Client", "hash123", CardKind::Client, CardStatus::Active, 1u);
+    const auto number = CardNumber::parse("4000123456789010");
+    const Card card(number, "Client", "hash123", CardKind::Client, CardStatus::Active, 1u);
 
-    EXPECT_EQ(card.number(), num);
+    EXPECT_EQ(card.number(), number);
     EXPECT_EQ(card.holderName(), "Client");
     EXPECT_EQ(card.pinHash(), "hash123");
     EXPECT_EQ(card.kind(), CardKind::Client);
     EXPECT_EQ(card.status(), CardStatus::Active);
-    EXPECT_EQ(card.failedAttempts(), 1);
-}
+    EXPECT_EQ(card.failedAttempts(), 1u);
 
-TEST(V2Card, ServiceCard_ConstructorOverridesStatusAndFailedAttempts) {
-    const auto num = CardNumber::parse("4000123456789099");
-    const Card serviceCard(num, "Service", "service_hash", CardKind::Service, CardStatus::Retained, 2u);
+    const Card retainedCard(number, "Client", "hash123", CardKind::Client, CardStatus::Retained, 3u);
+    EXPECT_EQ(retainedCard.status(), CardStatus::Retained);
+    EXPECT_EQ(retainedCard.failedAttempts(), 3u);
 
+    const auto serviceNumber = CardNumber::parse("4000123456789099");
+    const Card serviceCard(serviceNumber, "Service", "service_hash", CardKind::Service);
     EXPECT_EQ(serviceCard.kind(), CardKind::Service);
     EXPECT_EQ(serviceCard.status(), CardStatus::Active);
     EXPECT_EQ(serviceCard.failedAttempts(), 0u);
 }
 
+TEST(V2Card, ConstructorRejectsInvalidStatusOrFailedAttempts) {
+    const auto clientNumber = CardNumber::parse("4000123456789010");
+    const auto serviceNumber = CardNumber::parse("4000123456789099");
+
+    EXPECT_THROW((void)Card(clientNumber, "Client", "hash", CardKind::Client, CardStatus::Active, 3u), std::invalid_argument);
+    EXPECT_THROW((void)Card(clientNumber, "Client", "hash", CardKind::Client, CardStatus::Active, 4u), std::invalid_argument);
+
+    EXPECT_THROW((void)Card(clientNumber, "Client", "hash", CardKind::Client, CardStatus::Retained, 0u), std::invalid_argument);
+    EXPECT_THROW((void)Card(clientNumber, "Client", "hash", CardKind::Client, CardStatus::Retained, 2u), std::invalid_argument);
+    EXPECT_THROW((void)Card(clientNumber, "Client", "hash", CardKind::Client, CardStatus::Retained, 4u), std::invalid_argument);
+
+    EXPECT_THROW((void)Card(serviceNumber, "Service", "hash", CardKind::Service, CardStatus::Retained, 0u), std::invalid_argument);
+    EXPECT_THROW((void)Card(serviceNumber, "Service", "hash", CardKind::Service, CardStatus::Active, 1u), std::invalid_argument);
+}
+
 TEST(V2Card, FailedAttempts_RegisterFailedAttempts) {
-    const auto num = CardNumber::parse("4000123456789010");
-    Card card(num, "Client", "hash123", CardKind::Client);
+    const auto number = CardNumber::parse("4000123456789010");
+    Card card(number, "Client", "hash123", CardKind::Client);
 
     EXPECT_EQ(card.failedAttempts(), 0u);
     EXPECT_EQ(card.status(), CardStatus::Active);
@@ -73,8 +89,8 @@ TEST(V2Card, FailedAttempts_RegisterFailedAttempts) {
 }
 
 TEST(V2Card, Register_ResetsFailedAttempts) {
-    const auto num = CardNumber::parse("4000123456789010");
-    Card card(num, "Client", "hash123", CardKind::Client, CardStatus::Active, 2u);
+    const auto number = CardNumber::parse("4000123456789010");
+    Card card(number, "Client", "hash123", CardKind::Client, CardStatus::Active, 2u);
 
     EXPECT_EQ(card.failedAttempts(), 2u);
 
@@ -84,8 +100,8 @@ TEST(V2Card, Register_ResetsFailedAttempts) {
 }
 
 TEST(V2Card, ServiceCard_RegisterFailedAttempts_DoesNotChangeState) {
-    const auto num = CardNumber::parse("4000123456789099");
-    Card serviceCard(num, "Service", "service_hash", CardKind::Service);
+    const auto number = CardNumber::parse("4000123456789099");
+    Card serviceCard(number, "Service", "service_hash", CardKind::Service);
 
     serviceCard.registerFailedAttempt();
     EXPECT_EQ(serviceCard.failedAttempts(), 0u);
@@ -93,8 +109,8 @@ TEST(V2Card, ServiceCard_RegisterFailedAttempts_DoesNotChangeState) {
 }
 
 TEST(V2Card, ClientCard_Release_SetsStatusActiveAndResetsFailedAttempts) {
-    const auto num = CardNumber::parse("4000123456789010");
-    Card card(num, "Client", "hash123", CardKind::Client, CardStatus::Retained, 3u);
+    const auto number = CardNumber::parse("4000123456789010");
+    Card card(number, "Client", "hash123", CardKind::Client, CardStatus::Retained, 3u);
 
     card.release();
     EXPECT_EQ(card.status(), CardStatus::Active);
@@ -102,8 +118,8 @@ TEST(V2Card, ClientCard_Release_SetsStatusActiveAndResetsFailedAttempts) {
 }
 
 TEST(V2Card, ChangePinHash_Success_UpdatesPinHash) {
-    const auto num = CardNumber::parse("4000123456789010");
-    Card card(num, "Client", "old_hash", CardKind::Client);
+    const auto number = CardNumber::parse("4000123456789010");
+    Card card(number, "Client", "old_hash", CardKind::Client);
 
     card.changePinHash("new_hash");
     EXPECT_EQ(card.pinHash(), "new_hash");

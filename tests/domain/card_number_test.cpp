@@ -19,7 +19,7 @@ static_assert(!std::is_convertible_v<std::string, CardNumber>);
 
 // --- str & masked & parse ---
 
-TEST(V2CardNumber, Str_Masked_Format_DefaultZeroes) {
+TEST(V2CardNumber, Str_Masked_DefaultZeroes) {
     const CardNumber card{};
     EXPECT_EQ(card.str(), "0000000000000000");
     EXPECT_EQ(card.masked(), "**** **** **** 0000");
@@ -47,7 +47,7 @@ TEST(V2CardNumber, Parse_ThrowsInvalidArgument_InvalidCharacters) {
     EXPECT_THROW((void)CardNumber::parse("1234-5678-9012-3456"), std::invalid_argument);
 }
 
-TEST(V2CardNumber, Str_Masked_Format_ValidCard) {
+TEST(V2CardNumber, Str_Masked_ValidCard) {
     const auto card = CardNumber::parse("4000123456789010");
     EXPECT_EQ(card.str(), "4000123456789010");
     EXPECT_EQ(card.masked(), "**** **** **** 9010");
