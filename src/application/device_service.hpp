@@ -1,19 +1,21 @@
 #ifndef ATM_APPLICATION_DEVICE_SERVICE_HPP
 #define ATM_APPLICATION_DEVICE_SERVICE_HPP
 
-#include <domain/istorage.hpp>
+#include "domain/istorage.hpp"
 
 namespace atm::application {
 
     class DeviceService {
     public:
         DeviceService(domain::IStorage& storage, domain::Clock clock)
-            : storage_(storage), clock_(std::move(clock)) {}
+            : storage_(storage), clock_(std::move(clock)) {
+                if(!clock_) throw domain::DomainError(domain::ErrorReason::InvalidData);
+            }
 
         [[nodiscard]] bool isInService() const noexcept { return inService_; }
         [[nodiscard]] bool isBroken() const noexcept { return storage_.broken(); }
 
-        domain::JournalEntry setInService(const domain::CardNumber actor, bool enable);
+        domain::JournalEntry setInService(const domain::CardNumber& actor, bool enable);
 
     private:
         domain::IStorage& storage_;

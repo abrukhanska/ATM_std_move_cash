@@ -26,14 +26,14 @@ namespace atm::presentation {
     {
         const auto inspection = ctx.auth.inspect(card);
 
-        if (inspection == domain::CardInspection::Unknown ||
-            inspection == domain::CardInspection::Retained) {
+        if (inspection == application::CardInspection::Unknown ||
+            inspection == application::CardInspection::Retained) {
             ctx.ui.showError("Card is unavailable.");
             return nullptr;
         }
 
         const bool isService =
-            inspection == domain::CardInspection::Service;
+            inspection == application::CardInspection::Service;
 
         int failedAttempts = 0;
         constexpr int maxAttempts = 3;
@@ -62,18 +62,18 @@ namespace atm::presentation {
 
             const auto status = ctx.auth.authenticate(card, pin);
 
-            if (status == domain::AuthStatus::Retained) {
+            if (status == application::AuthStatus::Retained) {
                 ctx.ui.showError("Card retained.");
                 return nullptr;
             }
 
-            if (status == domain::AuthStatus::WrongPin) {
+            if (status == application::AuthStatus::WrongPin) {
                 ++failedAttempts;
                 ctx.ui.showError("Incorrect PIN.");
                 continue;
             }
 
-            if (status == domain::AuthStatus::Ok) {
+            if (status == application::AuthStatus::Ok) {
                 if (isService) {
                     return std::make_unique<ServiceState>(
                         Session(card, domain::CardKind::Service)

@@ -38,15 +38,15 @@ namespace atm::presentation {
             return std::make_unique<IdleState>();
         }
 
-        const domain::CardInspection inspection =
+        const application::CardInspection inspection =
             ctx.auth.inspect(card);
 
-        if (inspection == domain::CardInspection::Unknown) {
+        if (inspection == application::CardInspection::Unknown) {
             ctx.ui.showError("Unknown card.");
             return nullptr;
         }
 
-        if (inspection == domain::CardInspection::Retained) {
+        if (inspection == application::CardInspection::Retained) {
             ctx.ui.showError("Card is retained.");
             return nullptr;
         }

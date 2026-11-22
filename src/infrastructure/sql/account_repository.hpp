@@ -7,7 +7,7 @@ namespace atm::infrastructure::sql {
 
 	class Database;
 
-	class AccountRepository : public domain::IAccountRepository {
+	class AccountRepository final : public domain::IAccountRepository {
 	public:
 		explicit AccountRepository(Database& db) : db_(db) {}
 

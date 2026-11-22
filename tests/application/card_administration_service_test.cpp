@@ -126,4 +126,35 @@ namespace {
         EXPECT_EQ(storage.commits, 0);
     }
 
+    TEST(SV3CardAdmin, RejectsActiveClientAndServiceTargetCards) {
+        TestStorage storage;
+        const auto operatorCard = CardNumber::parse("4000000000000001");
+        const auto activeClientCard = CardNumber::parse("4000000000000002");
+        const auto otherServiceCard = CardNumber::parse("4000000000000003");
+
+        storage.seed(Card(operatorCard, "Operator", "hash", CardKind::Service));
+        storage.seed(Card(activeClientCard, "Client", "hash", CardKind::Client, CardStatus::Active, 2));
+        storage.seed(Card(otherServiceCard, "Tech", "hash", CardKind::Service));
+
+        int clockCalls = 0;
+        const auto now = atm::domain::fromEpochSeconds(1'768'471'200);
+        CardAdministrationService service(storage, [&] { ++clockCalls; return now; });
+
+        EXPECT_DOMAIN_ERROR((void)service.release(operatorCard, activeClientCard), ErrorReason::AccessDenied);
+        EXPECT_DOMAIN_ERROR((void)service.release(operatorCard, operatorCard), ErrorReason::AccessDenied);
+        EXPECT_DOMAIN_ERROR((void)service.release(operatorCard, otherServiceCard), ErrorReason::AccessDenied);
+
+        const Card unchangedClient = storage.cards().find(activeClientCard).value();
+        EXPECT_EQ(unchangedClient.status(), CardStatus::Active);
+        EXPECT_EQ(unchangedClient.failedAttempts(), std::uint8_t{ 2 });
+
+        const Card unchangedService = storage.cards().find(operatorCard).value();
+        EXPECT_EQ(unchangedService.status(), CardStatus::Active);
+        EXPECT_EQ(unchangedService.failedAttempts(), std::uint8_t{ 0 });
+
+        EXPECT_EQ(storage.journal().last(100).size(), std::size_t{ 0 });
+        EXPECT_EQ(storage.commits, 0);
+        EXPECT_EQ(clockCalls, 0);
+    }
+
 }  // namespace

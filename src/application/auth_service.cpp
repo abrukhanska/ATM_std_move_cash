@@ -1,86 +1,83 @@
 #include "application/auth_service.hpp"
 #include "domain/transaction.hpp"
+#include "application/detail/access.hpp"
 
 namespace atm::application {
 
-    domain::CardInspection AuthService::inspect(const domain::CardNumber &actor) const
+    CardInspection AuthService::inspect(const domain::CardNumber &actor) const
     {
         const auto card = storage_.cards().find(actor);
-        if (!card.has_value()) return domain::CardInspection::Unknown;
-        if (card->status() == domain::CardStatus::Retained) return domain::CardInspection::Retained;
-        if (card->kind() == domain::CardKind::Client) return domain::CardInspection::Client;
-        return domain::CardInspection::Service;
+        if (!card.has_value()) return CardInspection::Unknown;
+        if (card->status() == domain::CardStatus::Retained) return CardInspection::Retained;
+        if (card->kind() == domain::CardKind::Client) return CardInspection::Client;
+        return CardInspection::Service;
     }
 
-    domain::AuthStatus AuthService::authenticate(const domain::CardNumber &actor, const domain::PinCode &pin)
+    AuthStatus AuthService::authenticate(const domain::CardNumber &actor, const domain::PinCode &pin)
     {
         auto card = storage_.cards().find(actor);
         if (!card.has_value()) throw domain::DomainError(domain::ErrorReason::UnknownCard);
-        if (card->status() == domain::CardStatus::Retained) return domain::AuthStatus::Retained;
+        if (card->status() == domain::CardStatus::Retained) return AuthStatus::Retained;
 
         std::string_view pinSV(pin.digits().data(), pin.digits().size());
 
         // Service Card
         if (card->kind() == domain::CardKind::Service) {
             if (pinHasher_.matches(pinSV, card->pinHash())) {
-                return domain::AuthStatus::Ok;
+                return AuthStatus::Ok;
             }
-            return domain::AuthStatus::WrongPin;
+            return AuthStatus::WrongPin;
         }
+
+        domain::Transaction transaction(storage_);
 
         // Client Card
         const bool match = pinHasher_.matches(pinSV, card->pinHash());
         if (match) {
             card->registerSuccess();
-            domain::Transaction transaction(storage_);
             storage_.cards().save(*card);
             transaction.commit();
-            return domain::AuthStatus::Ok;
-        } else {
-            card->registerFailedAttempt();
-            const bool retained = (card->status() == domain::CardStatus::Retained);
-
-            domain::Transaction transaction(storage_);
-            storage_.cards().save(*card);
-
-            if (retained) {
-                const auto now = clock_();
-                domain::JournalEntry entry;
-                entry.atUtc = domain::toEpochSeconds(now);
-                entry.localDay = domain::localDay(now);
-                entry.kind = domain::EntryKind::CardRetained;
-                entry.actor = actor;
-                entry.subjectCard = actor;
-                entry.amount = domain::Money::ofKopiykas(0);
-
-                storage_.journal().append(entry);
-            }
-
-            transaction.commit();
-
-            return retained ? domain::AuthStatus::Retained : domain::AuthStatus::WrongPin;
+            return AuthStatus::Ok;
         }
+
+        card->registerFailedAttempt();
+        const bool retained = (card->status() == domain::CardStatus::Retained);
+        storage_.cards().save(*card);
+
+        if (retained) {
+            const auto now = clock_();
+            domain::JournalEntry entry;
+            entry.atUtc = domain::toEpochSeconds(now);
+            entry.localDay = domain::localDay(now);
+            entry.kind = domain::EntryKind::CardRetained;
+            entry.actor = actor;
+            entry.subjectCard = actor;
+            entry.amount = domain::Money::ofKopiykas(0);
+
+            (void)storage_.journal().append(entry);
+        }
+
+        transaction.commit();
+        return retained ? AuthStatus::Retained : AuthStatus::WrongPin;
     }
 
-    void AuthService::changePin(const domain::CardNumber &actor, const domain::PinCode &oldPin, const domain::PinCode &newPin)
+    void AuthService::changePin(const domain::CardNumber& actor, const domain::PinCode& oldPin, const domain::PinCode& newPin)
     {
-        auto card = storage_.cards().find(actor);
-        if (!card.has_value()) throw domain::DomainError(domain::ErrorReason::UnknownCard);
-        if (card->kind() != domain::CardKind::Client || card->status() != domain::CardStatus::Active) {
-            throw domain::DomainError(domain::ErrorReason::AccessDenied);
-        }
+        domain::Transaction transaction(storage_);
 
-        std::string_view oldPinSV(oldPin.digits().data(), oldPin.digits().size());
-        std::string_view newPinSV(newPin.digits().data(), newPin.digits().size());
+        auto card = detail::requireActiveClient(storage_, actor);
 
-        if (!pinHasher_.matches(oldPinSV, card->pinHash())) {
+        const std::string_view oldPinSV(oldPin.digits().data(), oldPin.digits().size());
+        const std::string_view newPinSV(newPin.digits().data(), newPin.digits().size());
+
+        if (!pinHasher_.matches(oldPinSV, card.pinHash())) {
             throw domain::DomainError(domain::ErrorReason::IncorrectPin);
         }
+        if (oldPin == newPin) {
+            throw domain::DomainError(domain::ErrorReason::SamePin);
+        }
 
-        if (oldPin == newPin) throw domain::DomainError(domain::ErrorReason::SamePin);
-
-        const std::string newHash = pinHasher_.hash(newPinSV);
-        card->changePinHash(newHash);
+        card.changePinHash(pinHasher_.hash(newPinSV));
 
         const auto now = clock_();
         domain::JournalEntry entry;
@@ -90,9 +87,8 @@ namespace atm::application {
         entry.actor = actor;
         entry.amount = domain::Money::ofKopiykas(0);
 
-        domain::Transaction transaction(storage_);
-        storage_.cards().save(*card);
-        storage_.journal().append(entry);
+        storage_.cards().save(card);
+        (void)storage_.journal().append(entry);
         transaction.commit();
     }
 

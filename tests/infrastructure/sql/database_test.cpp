@@ -79,8 +79,8 @@ TEST(DB1Database, DBInitialAndRepeatedLaunch) {
 
             int rc = sqlite3_exec(
                 db.handle(),
-                "INSERT INTO journal (at_utc, local_day, kind, actor_card, amount_kop) "
-                "VALUES (1700000000, '2026-11-14', 'CardRetained', '4000000000000001', 0);",
+                "INSERT INTO journal (at_utc, local_day, kind, actor_card, subject_card, amount_kop) "
+                "VALUES (1700000000, '2026-11-14', 'CardRetained', '4000000000000001', '4000000000000001', 0);",
                 nullptr, nullptr, nullptr);
             EXPECT_TRUE(rc == SQLITE_OK);
 
@@ -113,6 +113,7 @@ TEST(DB1Database, DBInitialAndRepeatedLaunch) {
         auto entries = db.journal().last(10);
         EXPECT_TRUE(entries.size() == 1);
         EXPECT_TRUE(entries[0].kind == EntryKind::CardRetained);
+        EXPECT_TRUE(entries[0].subjectCard == client_number);
     }
 
     if (std::filesystem::exists(db_path)) {

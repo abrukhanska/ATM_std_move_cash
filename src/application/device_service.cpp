@@ -1,15 +1,14 @@
 #include "application/device_service.hpp"
 #include "domain/transaction.hpp"
+#include "application/detail/access.hpp"
 
 namespace atm::application {
 
-    domain::JournalEntry DeviceService::setInService(const domain::CardNumber actor, bool enable)
+    domain::JournalEntry DeviceService::setInService(const domain::CardNumber& actor, bool enable)
     {
-        const auto card = storage_.cards().find(actor);
-        if (!card.has_value()) throw domain::DomainError(domain::ErrorReason::UnknownCard);
-        if (card->kind() != domain::CardKind::Service || card->status() != domain::CardStatus::Active) {
-            throw domain::DomainError(domain::ErrorReason::AccessDenied);
-        }
+        domain::Transaction transaction(storage_);
+
+        (void)detail::requireOperator(storage_, actor);
         if (enable && storage_.broken()) {
             throw domain::DomainError(domain::ErrorReason::AccessDenied);
         }
@@ -23,7 +22,6 @@ namespace atm::application {
         entry.actor = actor;
         entry.amount = domain::Money::ofKopiykas(0);
 
-        domain::Transaction transaction(storage_);
         auto saved = storage_.journal().append(entry);
         transaction.commit();
 
